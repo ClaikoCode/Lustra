@@ -1,0 +1,7 @@
+.vs/
+out/
+
+# Environment specific files
+compile_commands.json
+.clang-format
+.clangd

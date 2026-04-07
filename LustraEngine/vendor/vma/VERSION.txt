@@ -1,0 +1,1 @@
+VulkanMemoryAllocator (VMA) v3.3.0 - Acquired on 07/04/2026

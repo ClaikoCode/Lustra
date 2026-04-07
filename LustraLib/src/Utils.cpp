@@ -3,6 +3,7 @@
 #include "Logger.h"
 
 #include <stdlib.h> // wcstomb_s, mbstowcs_s
+#include <cstring>
 
 static const size_t sMaxSize = 4 * Utils::MemoryUnitKB; // 4kB set as limit.
 constexpr const char* sTooMuchMemoryErrorMessage =

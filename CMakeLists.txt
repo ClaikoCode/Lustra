@@ -14,7 +14,7 @@ if(POLICY CMP0141)
   cmake_policy(SET CMP0141 OLD)
 endif()
 
-project(Lustra DESCRIPTION "Lustra Engine + Lib" LANGUAGES CXX)
+project(Lustra DESCRIPTION "Lustra Engine + Lib" LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -23,9 +23,11 @@ add_compile_definitions()
 
 # Global compile options.
 if(MSVC)
+	message(STATUS "Using MSVC compile flags")
 	add_compile_options(/W4 /WX)
 	add_compile_options(/Zc:preprocessor) # Preprocessor conformance mode (fixes __VA_OPT__ support).
 else()
+	message(STATUS "Using non-MSVC compile flags")
 	add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()
 

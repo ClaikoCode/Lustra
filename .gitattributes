@@ -1,0 +1,2 @@
+# Do not count any vendored files in language statistics.
+**/vendor/** linguist-vendored

@@ -1,2 +1,5 @@
 # Do not count any vendored files in language statistics.
 **/vendor/** linguist-vendored
+
+# Lustra is entirely written for C++ and any (non-vendored) .h file should be considered as a C++ file. 
+*.h linguist-language=C++

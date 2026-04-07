@@ -4,6 +4,8 @@
 #include "LustraLib/Logger.h"
 #include "SDL3/SDL.h"
 
+#include <string>
+
 Window::Window(const char* name, uint32_t width, uint32_t height)
 {
 	InitWindow(name, width, height);
@@ -25,8 +27,13 @@ void Window::DestroyWindow()
 {
 	if (m_window != nullptr)
 	{
-		SDL_DestroyWindow((SDL_Window*)m_window);
+		SDL_Window* windowPtr = (SDL_Window*)m_window;
+		std::string windowName = SDL_GetWindowTitle(windowPtr);
+
+		SDL_DestroyWindow(windowPtr);
 		m_window = nullptr;
+
+		PRINT_DEBUG("Destroyed window '{}'.", windowName);
 	}
 }
 

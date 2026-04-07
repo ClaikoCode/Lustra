@@ -12,11 +12,11 @@ App::App(const char* appName) : m_name(appName)
 
 App::~App()
 {
-	PRINT_DEBUG("Destroying App '{}'", m_name);
-
 	m_window.DestroyWindow();
 
 	SDL_Quit();
+
+	PRINT_DEBUG("Destroyed App '{}'.", m_name);
 }
 
 bool App::RunApp()

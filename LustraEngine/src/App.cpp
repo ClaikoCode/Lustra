@@ -1,13 +1,15 @@
 #include "App.h"
 
+#include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "SDL3/SDL.h"
+#include "SDLAssert.h"
 
 App::App(const char* appName) : m_name(appName)
 {
-	PRINT_DEBUG("Creating App '{}'", m_name);
+	PRINT_DEBUG("Creating App '{}'.", m_name);
 
-	SDL_Init(SDL_INIT_VIDEO);
+	ASSERT_SDL(SDL_Init(SDL_INIT_VIDEO) == true, "Could not init SDL");
 }
 
 App::~App()

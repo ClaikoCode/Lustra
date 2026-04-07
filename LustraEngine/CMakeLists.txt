@@ -15,7 +15,7 @@ find_package(Vulkan 1.3 REQUIRED COMPONENTS dxc)
 # Add vendored libraries
 add_subdirectory(vendor)
 
-add_executable(LustraEngine "src/main.cpp" "src/Window.h" "src/Window.cpp" "src/App.h" "src/App.cpp" "src/Graphics.h" "src/Graphics.cpp")
+add_executable(LustraEngine "src/main.cpp" "src/Window.h" "src/Window.cpp" "src/App.h" "src/App.cpp" "src/Graphics.h" "src/Graphics.cpp" "src/SDLAssert.h")
 
 target_link_libraries(LustraEngine PRIVATE 
     LustraLib

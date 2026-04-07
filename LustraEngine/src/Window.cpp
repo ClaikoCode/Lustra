@@ -3,6 +3,7 @@
 #include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "SDL3/SDL.h"
+#include "SDLAssert.h"
 
 #include <string>
 
@@ -20,7 +21,8 @@ void Window::InitWindow(const char* name, uint32_t width, uint32_t height)
 	}
 
 	m_window = SDL_CreateWindow(name, width, height, SDL_WINDOW_RESIZABLE);
-	ENSURE(m_window != nullptr);
+
+	ASSERT_SDL(m_window != nullptr, "SDL could not create window");
 }
 
 void Window::DestroyWindow()

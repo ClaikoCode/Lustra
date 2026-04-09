@@ -116,8 +116,8 @@ namespace Graphics
 			ENUM_TO_S(VK_ERROR_FORMAT_NOT_SUPPORTED)
 			ENUM_TO_S(VK_ERROR_FRAGMENTED_POOL)
 			ENUM_TO_S(VK_ERROR_UNKNOWN)
-		default:
-			return "UNHANDLED VK RESULT STRING";
+			default:
+				return "UNHANDLED VK RESULT STRING";
 		}
 	}
 } // namespace Graphics

@@ -35,29 +35,30 @@
 
 // Only call debug trap if in a debug configuration.
 #if defined(_DEBUG)
-#define _DEBUG_TRAP() __builtin_debugtrap()
+	#define _DEBUG_TRAP() __builtin_debugtrap()
 #else
-#define _DEBUG_TRAP() _NO_OP_MACRO
+	#define _DEBUG_TRAP() _NO_OP_MACRO
 #endif
 
 // ----- CHECK assertion base macros -----
 #if defined(_DEBUG) || defined(ENABLE_NON_DEBUG_CHECKS)
 
-// Evalute expression, log, halt program, and exit.
-#define _LUSTRA_CHECK_BASE(expression, message)                                                                        \
-	do                                                                                                                 \
-		if ((expression) == false)                                                                                     \
+    // Evalute expression, log, halt program, and exit.
+	#define _LUSTRA_CHECK_BASE(expression, message)                                                                    \
+		do                                                                                                             \
 		{                                                                                                              \
-			PRINT_ERROR("[CHECK ASSERTION FAILED] " message);                                                          \
-			_DEBUG_TRAP();                                                                                             \
-			exit(1);                                                                                                   \
-		}                                                                                                              \
-	while (false)
+			if ((expression) == false)                                                                                 \
+			{                                                                                                          \
+				PRINT_ERROR("[CHECK ASSERTION FAILED] " message);                                                      \
+				_DEBUG_TRAP();                                                                                         \
+				exit(1);                                                                                               \
+			}                                                                                                          \
+		} while (false)
 
 #else
 
-// Do nothing.
-#define _LUSTRA_CHECK_BASE(expression, message) _NO_OP_MACRO
+    // Do nothing.
+	#define _LUSTRA_CHECK_BASE(expression, message) _NO_OP_MACRO
 
 #endif
 // -------------------------------------------
@@ -65,32 +66,34 @@
 // ----- VALIDATE assertion base macros -----
 #if defined(_DEBUG)
 
-// Validate expression, log, halt program, and exit.
-#define _LUSTRA_VALIDATE_BASE(expression, message)                                                                     \
-	do                                                                                                                 \
-		if ((expression) == false)                                                                                     \
+    // Validate expression, log, halt program, and exit.
+	#define _LUSTRA_VALIDATE_BASE(expression, message)                                                                 \
+		do                                                                                                             \
 		{                                                                                                              \
-			PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                       \
-			_DEBUG_TRAP();                                                                                             \
-			exit(1);                                                                                                   \
-		}                                                                                                              \
-	while (false)
+			if ((expression) == false)                                                                                 \
+			{                                                                                                          \
+				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                   \
+				_DEBUG_TRAP();                                                                                         \
+				exit(1);                                                                                               \
+			}                                                                                                          \
+		} while (false)
 
 #elif defined(NON_LOGGING_VALIDATIONS)
 
-// Only evaluate expression.
-#define _LUSTRA_VALIDATE_BASE(expression, message) (expression)
+    // Only evaluate expression.
+	#define _LUSTRA_VALIDATE_BASE(expression, message) (expression)
 
 #else
 
-// Validate expression, and log.
-#define _LUSTRA_VALIDATE_BASE(expression, message)                                                                     \
-	do                                                                                                                 \
-		if ((expression) == false)                                                                                     \
+    // Validate expression, and log.
+	#define _LUSTRA_VALIDATE_BASE(expression, message)                                                                 \
+		do                                                                                                             \
 		{                                                                                                              \
-			PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                       \
-		}                                                                                                              \
-	while (false)
+			if ((expression) == false)                                                                                 \
+			{                                                                                                          \
+				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                   \
+			}                                                                                                          \
+		} while (false)
 
 #endif
 // -------------------------------------------
@@ -100,13 +103,14 @@
 // Validate expression, log, halt program, and exit.
 #define _LUSTRA_ENSURE_BASE(expression, message)                                                                       \
 	do                                                                                                                 \
+	{                                                                                                                  \
 		if ((expression) == false)                                                                                     \
 		{                                                                                                              \
 			PRINT_ERROR("[ENSURE ASSERTION FAILED] " message);                                                         \
 			_DEBUG_TRAP();                                                                                             \
 			exit(1);                                                                                                   \
 		}                                                                                                              \
-	while (false)
+	} while (false)
 
 // -------------------------------------------
 
@@ -127,9 +131,10 @@
 // Pure assert
 #define LUSTRA_ASSERT(expression)                                                                                      \
 	do                                                                                                                 \
+	{                                                                                                                  \
 		if ((expression) == false)                                                                                     \
 		{                                                                                                              \
 			_DEBUG_TRAP();                                                                                             \
 			exit(1);                                                                                                   \
 		}                                                                                                              \
-	while (false)
+	} while (false)

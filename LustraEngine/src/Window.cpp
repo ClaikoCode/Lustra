@@ -31,7 +31,7 @@ void Window::DestroyWindow()
 {
 	if (m_window != nullptr)
 	{
-		SDL_Window* windowPtr = (SDL_Window*)m_window;
+		SDL_Window* windowPtr  = (SDL_Window*)m_window;
 		std::string windowName = SDL_GetWindowTitle(windowPtr);
 
 		SDL_DestroyWindow(windowPtr);

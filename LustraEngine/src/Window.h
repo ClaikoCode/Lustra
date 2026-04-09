@@ -10,7 +10,7 @@ class Window
 	~Window();
 
 	// Cannot copy window object.
-	Window(Window& other) = delete;
+	Window(Window& other)            = delete;
 	Window& operator=(Window& other) = delete;
 
 	void InitWindow(const char* name, uint32_t width, uint32_t height);
@@ -19,4 +19,3 @@ class Window
   private:
 	void* m_window = nullptr;
 };
-

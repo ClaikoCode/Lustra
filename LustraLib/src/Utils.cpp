@@ -2,8 +2,8 @@
 
 #include "Logger.h"
 
-#include <stdlib.h> // wcstomb_s, mbstowcs_s
 #include <cstring>
+#include <stdlib.h> // wcstomb_s, mbstowcs_s
 
 static const size_t sMaxSize = 4 * Utils::MemoryUnitKB; // 4kB set as limit.
 constexpr const char* sTooMuchMemoryErrorMessage =
@@ -14,8 +14,9 @@ namespace Utils
 	std::string ConvertStringWideToNarrow(const wchar_t* wideString)
 	{
 		const size_t wideSize = wcslen(wideString) + 1; // Include null terminator;
-		const size_t narrowSize =
-		    wideSize * sizeof(wchar_t); // Make enough space to hold characters spanning more than one byte.
+
+		// Make enough space to hold characters spanning more than one byte.
+		const size_t narrowSize = wideSize * sizeof(wchar_t);
 
 		if (narrowSize > sMaxSize)
 		{
@@ -23,7 +24,7 @@ namespace Utils
 			return "";
 		}
 
-		char narrowString[sMaxSize] = {};
+		char narrowString[sMaxSize]   = {};
 		size_t convertedNumberOfChars = 0; // Does not include null terminator.
 		if (wcstombs_s(&convertedNumberOfChars, narrowString, narrowSize, wideString, _TRUNCATE) != 0)
 		{
@@ -46,10 +47,9 @@ namespace Utils
 			return L"";
 		}
 
-		const size_t wideStringMaxCharacters = sMaxSize / sizeof(wchar_t);
+		const size_t wideStringMaxCharacters        = sMaxSize / sizeof(wchar_t);
 		wchar_t wideString[wideStringMaxCharacters] = {};
-
-		size_t convertedNumberOfChars = 0;
+		size_t convertedNumberOfChars               = 0;
 		if (mbstowcs_s(&convertedNumberOfChars, wideString, wideStringMaxCharacters, narrowString, _TRUNCATE) != 0)
 		{
 			PRINT_ERROR("Could not convert narrow string into wide string. Returning empty string.");

@@ -8,13 +8,13 @@
 
 namespace Graphics
 {
-	constexpr uint32_t gEngineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-	constexpr uint32_t gApplicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
+	constexpr uint32_t gEngineVersion       = VK_MAKE_API_VERSION(0, 1, 0, 0);
+	constexpr uint32_t gApplicationVersion  = VK_MAKE_API_VERSION(0, 1, 0, 0);
 	constexpr uint32_t gTargetVulkanVersion = VK_API_VERSION_1_3;
 
-	inline VkInstance gVkInstance = {};
+	inline VkInstance gVkInstance             = {};
 	inline VkPhysicalDevice gVkPhysicalDevice = {};
-	inline VkDevice gVkDevice = {};
+	inline VkDevice gVkDevice                 = {};
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	// Can be supplied with external

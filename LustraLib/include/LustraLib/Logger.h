@@ -48,14 +48,21 @@ namespace LustraLib
 	// Takes an already formatted message and prints it together with an output header.
 	// This function is thread-safe: a mutex is locked when printing to avoid concurrent writing to the same file.
 	void PrintImpl(
-	    OutputLevel outputLevel, std::string_view filePath, std::string_view funcName, uint32_t line,
+	    OutputLevel outputLevel,
+	    std::string_view filePath,
+	    std::string_view funcName,
+	    uint32_t line,
 	    std::string_view formattedMessage
 	);
 
 	template <typename... Args>
 	void Print(
-	    OutputLevel outputLevel, std::string_view filePath, std::string_view funcName, uint32_t line,
-	    std::format_string<Args...> messageFormat, Args&&... args
+	    OutputLevel outputLevel,
+	    std::string_view filePath,
+	    std::string_view funcName,
+	    uint32_t line,
+	    std::format_string<Args...> messageFormat,
+	    Args&&... args
 	)
 	{
 		std::string formattedMessage = std::format(messageFormat, std::forward<Args>(args)...);

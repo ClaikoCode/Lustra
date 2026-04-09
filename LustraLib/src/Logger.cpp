@@ -17,7 +17,10 @@ namespace LustraLib
 	// clang-format on
 
 	void PrintImpl(
-	    OutputLevel outputLevel, std::string_view filePath, std::string_view funcName, uint32_t line,
+	    OutputLevel outputLevel,
+	    std::string_view filePath,
+	    std::string_view funcName,
+	    uint32_t line,
 	    std::string_view formattedMessage
 	)
 	{

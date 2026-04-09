@@ -8,6 +8,6 @@
 		if ((SDL_expression) == false)                                                                                 \
 		{                                                                                                              \
 			PRINT_ERROR(message ": {}.", SDL_GetError());                                                              \
-			LUSTRA_ASSERT(false);                                                                                      \
+			LUSTRA_ASSERT((SDL_expression));                                                                           \
 		}                                                                                                              \
 	while (false)

@@ -64,6 +64,9 @@ bool App::RunApp()
 		}
 	}
 
+	Graphics::TearDownVulkan();
+
+	// False means a quit without errors
 	return false;
 }
 

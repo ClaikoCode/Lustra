@@ -2,10 +2,10 @@
 
 #include "Logger.h"
 
+#include <cstdlib> // wcstomb_s, mbstowcs_s
 #include <cstring>
-#include <stdlib.h> // wcstomb_s, mbstowcs_s
 
-static const size_t sMaxSize = 4 * Utils::MemoryUnitKB; // 4kB set as limit.
+static const size_t sMaxSize = 4ull * Utils::MemoryUnitKB; // 4kB set as limit.
 constexpr const char* sTooMuchMemoryErrorMessage =
     "String conversion required too much memory (over {} bytes). Returning empty string.";
 

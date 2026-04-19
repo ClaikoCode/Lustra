@@ -10,6 +10,11 @@ class App
 	App(const char* appName);
 	~App();
 
+	App(App& other)             = delete;
+	App(App&& temp)             = delete;
+	App& operator=(App& other)  = delete;
+	App& operator=(App&& other) = delete;
+
 	void CreateWindow(const char* name, uint32_t width, uint32_t height);
 	// Returns if quit with error or not.
 	bool RunApp();

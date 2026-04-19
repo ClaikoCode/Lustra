@@ -14,7 +14,7 @@
 #define ASSERT_VK(vkResult)                                                                                            \
 	do                                                                                                                 \
 	{                                                                                                                  \
-		VkResult err = (vkResult);                                                                                     \
+		const VkResult err = (vkResult);                                                                               \
 		if (err < 0)                                                                                                   \
 		{                                                                                                              \
 			PRINT_ERROR("Detected Vulkan Error: {}", Graphics::VkResultToString(err));                                 \

@@ -3,6 +3,7 @@
 #include <cstdio>  // printf, sprintf
 #include <cstring> // std::memset
 #include <mutex>
+#include <print>
 
 namespace LustraLib
 {
@@ -35,18 +36,15 @@ namespace LustraLib
 		    outputLevel < OutputLevelCount ? ceOutputLevelString[outputLevel] : "UNKNOWN OUTPUT LEVEL";
 		FILE* const outputFile = outputLevel == OutputLevelError ? stderr : stdout;
 
-		int result = 0;
 		if (gLoggerOptions.printSourceLocationInfo)
 		{
-			const char* headerFmt = "[%s] (%s -> %s:%u): %s\n";
-
 			// Default to regular filepath
 			std::string_view fileName = filePath;
 
 			// Avoids printing the whole path. Makes output tidier.
 			if (!gLoggerOptions.printFullPath)
 			{
-				size_t fileNameStartPos = filePath.find_last_of("/");
+				const size_t fileNameStartPos = filePath.find_last_of('/');
 				if (fileNameStartPos != std::string_view::npos)
 				{
 					fileName = filePath.substr(fileNameStartPos + 1);
@@ -54,11 +52,11 @@ namespace LustraLib
 			}
 
 			{
-				std::scoped_lock printingLock(sPrintingMutex);
+				const std::scoped_lock printingLock(sPrintingMutex);
 
-				result = fprintf(
+				std::print(
 				    outputFile,
-				    headerFmt,
+				    "[{}] ({} -> {}:{}): {}\n",
 				    outputLevelString,
 				    funcName.data(),
 				    fileName.data(),
@@ -69,18 +67,11 @@ namespace LustraLib
 		}
 		else
 		{
-			const char* headerFmt = "[%s] %s\n";
-
 			{
-				std::scoped_lock printingLock(sPrintingMutex);
+				const std::scoped_lock printingLock(sPrintingMutex);
 
-				result = fprintf(outputFile, headerFmt, outputLevelString, formattedMessage.data());
+				std::print(outputFile, "[{}] {}\n", outputLevelString, formattedMessage.data());
 			}
-		}
-
-		if (result < 0)
-		{
-			fprintf(stderr, "fprintf() failed to output logging string!");
 		}
 	}
 } // namespace LustraLib

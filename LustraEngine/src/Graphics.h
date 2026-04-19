@@ -28,7 +28,7 @@ namespace Graphics
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	// Can be supplied with external
-	void SetupVulkan(const std::string_view appName, const std::vector<const char*>& externalRequestedExtensions);
+	void SetupVulkan(std::string_view appName, const std::vector<const char*>& externalRequestedExtensions);
 	void TearDownVulkan();
 
 	void SetupInstance(

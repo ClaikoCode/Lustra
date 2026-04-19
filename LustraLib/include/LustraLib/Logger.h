@@ -20,7 +20,7 @@
 
 namespace LustraLib
 {
-	enum OutputLevel : uint32_t
+	enum OutputLevel : uint8_t
 	{
 		OutputLevelTrace = 0u,
 		OutputLevelDebug,

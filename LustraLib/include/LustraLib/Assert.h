@@ -2,6 +2,8 @@
 
 #include "Logger.h"
 
+#include <cstdlib>
+
 // Assert handling in Lustra is split up into 3 distinct categories:
 // * Check
 // * Validate
@@ -33,6 +35,8 @@
 	{                                                                                                                  \
 	} while (false)
 
+#define _THREAD_SAFE_EXIT() std::quick_exit(1)
+
 // Only call debug trap if in a debug configuration.
 #if defined(_DEBUG)
 	#define _DEBUG_TRAP() __builtin_debugtrap()
@@ -51,7 +55,7 @@
 			{                                                                                                          \
 				PRINT_ERROR("[CHECK ASSERTION FAILED] " message);                                                      \
 				_DEBUG_TRAP();                                                                                         \
-				exit(1);                                                                                               \
+				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
 		} while (false)
 
@@ -74,7 +78,7 @@
 			{                                                                                                          \
 				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                   \
 				_DEBUG_TRAP();                                                                                         \
-				exit(1);                                                                                               \
+				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
 		} while (false)
 
@@ -108,7 +112,7 @@
 		{                                                                                                              \
 			PRINT_ERROR("[ENSURE ASSERTION FAILED] " message);                                                         \
 			_DEBUG_TRAP();                                                                                             \
-			exit(1);                                                                                                   \
+			_THREAD_SAFE_EXIT();                                                                                       \
 		}                                                                                                              \
 	} while (false)
 
@@ -135,6 +139,6 @@
 		if ((expression) == false)                                                                                     \
 		{                                                                                                              \
 			_DEBUG_TRAP();                                                                                             \
-			exit(1);                                                                                                   \
+			_THREAD_SAFE_EXIT();                                                                                       \
 		}                                                                                                              \
 	} while (false)

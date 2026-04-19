@@ -9,7 +9,7 @@ namespace
 {
 	// Should return bool that tells if the callback should be aborted. However, returning true is usually only for
 	// testing the validation layers themselves, so returning false is the default behavior.
-	static VKAPI_ATTR VkBool32 VKAPI_CALL VkDebugMessagingCallback(
+	VKAPI_ATTR VkBool32 VKAPI_CALL VkDebugMessagingCallback(
 	    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 	    VkDebugUtilsMessageTypeFlagsEXT messageType,
 	    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
@@ -19,7 +19,7 @@ namespace
 		UNUSED_VAR(userData);
 		UNUSED_VAR(messageType);
 
-		bool prevSetting = LustraLib::gLoggerOptions.printSourceLocationInfo;
+		const bool prevSetting = LustraLib::gLoggerOptions.printSourceLocationInfo;
 
 		// No need to print source location.
 		LustraLib::gLoggerOptions.printSourceLocationInfo = false;
@@ -111,7 +111,7 @@ namespace Graphics
 
 		VkApplicationInfo applicationInfo  = vkInitStruct();
 		applicationInfo.apiVersion         = gTargetVulkanVersion;
-		applicationInfo.pApplicationName   = appName.size() != 0 ? appName.data() : "Default App Name";
+		applicationInfo.pApplicationName   = appName.empty() ? "Default App Name" : appName.data();
 		applicationInfo.applicationVersion = gApplicationVersion;
 		applicationInfo.pEngineName        = "Lustra Engine";
 		applicationInfo.engineVersion      = gEngineVersion;
@@ -165,7 +165,7 @@ namespace Graphics
 			std::vector<VkLayerProperties> instanceLayerProperties(layerCount);
 			ASSERT_VK(vkEnumerateInstanceLayerProperties(&layerCount, instanceLayerProperties.data()));
 
-			for (auto requestedLayer : requestedLayers)
+			for (const char* requestedLayer : requestedLayers)
 			{
 				bool requestedLayerIsSupported = false;
 				for (auto supportedLayer : instanceLayerProperties)
@@ -178,7 +178,7 @@ namespace Graphics
 					}
 				}
 
-				if (requestedLayerIsSupported == false)
+				if (!requestedLayerIsSupported)
 				{
 					PRINT_ERROR("Requested layer '{}' was not found. Aborting.", requestedLayer);
 					LUSTRA_ASSERT(false);
@@ -263,9 +263,9 @@ namespace Graphics
 		debugMessengerCreateInfo.messageSeverity =
 		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
-		debugMessengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-		                                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-		                                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+		debugMessengerCreateInfo.messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+		                                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
+		                                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
 		debugMessengerCreateInfo.pfnUserCallback = ::VkDebugMessagingCallback;
 		debugMessengerCreateInfo.pUserData       = nullptr; // No user data for now.
 

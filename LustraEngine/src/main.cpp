@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
 	App app = App("Lustra App");
 	app.CreateWindow("Lustra (Vulkan)", 1280, 720);
 
-	if (app.RunApp() == true)
+	if (app.RunApp())
 	{
 		PRINT_ERROR("App exited with errors.");
 	}

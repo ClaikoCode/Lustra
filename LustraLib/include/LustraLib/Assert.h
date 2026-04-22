@@ -125,11 +125,11 @@
 #define CHECK(expression) _LUSTRA_CHECK_BASE(expression, "(" #expression ")")
 
 // VALIDATE assert macros
-#define VALIDATE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "):" message)
+#define VALIDATE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "): " message)
 #define VALIDATE(expression) _LUSTRA_VALIDATE_BASE(expression, "(" #expression ")")
 
 // ENSURE assert macros
-#define ENSURE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "):" message)
+#define ENSURE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "): " message)
 #define ENSURE(expression) _LUSTRA_VALIDATE_BASE(expression, "(" #expression ")")
 
 // Pure assert

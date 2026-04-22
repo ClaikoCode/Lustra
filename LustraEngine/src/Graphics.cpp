@@ -141,7 +141,7 @@ namespace Graphics
 	)
 	{
 		// NOTE: This is allowed to contain duplicate strings of the same extension.
-		std::vector<const char*> instanceExtensions = {"VK_KHR_surface", "VK_KHR_win32_surface"};
+		std::vector<const char*> instanceExtensions = {"VK_KHR_surface"};
 		for (const char* externalExtension : externalRequestedExtensions)
 		{
 			instanceExtensions.push_back(externalExtension);

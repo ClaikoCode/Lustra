@@ -3,6 +3,7 @@
 #include <format>
 #include <string>
 #include <string_view>
+#include <cstdint>
 
 // clang-format off
 #define ANSI_BLACK		"\033[0;30m"

@@ -2,7 +2,7 @@
 
 #include "Logger.h"
 
-#include <cstdlib> // wcstomb_s, mbstowcs_s
+#include <cstdlib> // wcstomb, mbstowcs
 #include <cstring>
 
 static const size_t sMaxSize = 4ull * Utils::MemoryUnitKB; // 4kB set as limit.
@@ -26,7 +26,9 @@ namespace Utils
 
 		char narrowString[sMaxSize]   = {};
 		size_t convertedNumberOfChars = 0; // Does not include null terminator.
-		if (wcstombs_s(&convertedNumberOfChars, narrowString, narrowSize, wideString, _TRUNCATE) != 0)
+		
+		size_t convertResult = std::wcstombs(narrowString, wideString, narrowSize);
+		if (convertResult == static_cast<size_t>(-1))
 		{
 			PRINT_ERROR("Could not convert wide string into narrow string. Returning empty string.");
 			return "";
@@ -50,7 +52,8 @@ namespace Utils
 		const size_t wideStringMaxCharacters        = sMaxSize / sizeof(wchar_t);
 		wchar_t wideString[wideStringMaxCharacters] = {};
 		size_t convertedNumberOfChars               = 0;
-		if (mbstowcs_s(&convertedNumberOfChars, wideString, wideStringMaxCharacters, narrowString, _TRUNCATE) != 0)
+		size_t convertResult = std::mbstowcs(wideString, narrowString, wideStringMaxCharacters); 
+		if (convertResult == static_cast<size_t>(-1))
 		{
 			PRINT_ERROR("Could not convert narrow string into wide string. Returning empty string.");
 			return L"";

@@ -26,6 +26,7 @@ If you already cloned without `--recurse-submodules`:
 - clang 18+, cmake 3.30+, ninja
 - Vulkan SDK 1.3+ (tarball from [LunarG](https://vulkan.lunarg.com/sdk/home#linux) and put `downloaded-sdk-version/setup-env.sh` into `~/.bashrc`)
 - Install SDL3 [build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies)
+- OTHER DEPENDENCIES NOT YET LISTED
 
 **Windows:**
 - Visual Studio 2026 with C++ workload

@@ -1,0 +1,9 @@
+CompileFlags:
+  CompilationDatabase: out/build/x64-Debug
+
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    FastCheckFilter: None

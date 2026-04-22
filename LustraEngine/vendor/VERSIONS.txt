@@ -1,0 +1,15 @@
+KTX-Software v4.4.2 - Acquired on 22/04/2026
+
+OpenGL Mathematics (GLM) v1.0.3 - Acquired on 07/04/2026
+
+SDL3 v3.3.4 - Acquired on 22/04/2026
+
+SPIRV-headers v1.4.341.0 - Acquired on 07/04/2026
+
+SPIRV-Reflect v1.4.341.0 - Acquired on 07/04/2026
+
+stb_image v2.30 - Acquired on 07/04/2026
+
+TinyGLTF v3.0.0 - Acquired on 07/04/2026
+
+VulkanMemoryAllocator (VMA) v3.3.0 - Acquired on 07/04/2026

@@ -1,1 +1,0 @@
-OpenGL Mathematics (GLM) v1.0.3 - Acquired on 07/04/2026

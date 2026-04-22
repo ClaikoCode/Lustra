@@ -1,0 +1,29 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+TabWidth: 4
+UseTab: ForIndentation
+ColumnLimit: 120
+Standard: Latest
+
+BreakBeforeBraces: Allman
+NamespaceIndentation: All
+BinPackArguments: false
+BinPackParameters: false
+PointerAlignment: Left
+AlignAfterOpenBracket: BlockIndent
+AlwaysBreakTemplateDeclarations: Yes
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+LambdaBodyIndentation: OuterScope
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+
+AlignConsecutiveAssignments: Consecutive
+AlignTrailingComments: Always
+AlignArrayOfStructures: Left
+AlignOperands: Align
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup

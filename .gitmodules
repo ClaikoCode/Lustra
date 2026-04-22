@@ -1,0 +1,6 @@
+[submodule "LustraEngine/vendor/ktx"]
+	path = LustraEngine/vendor/ktx
+	url = https://github.com/KhronosGroup/KTX-Software.git
+[submodule "LustraEngine/vendor/sdl3"]
+	path = LustraEngine/vendor/sdl3
+	url = https://github.com/libsdl-org/SDL.git

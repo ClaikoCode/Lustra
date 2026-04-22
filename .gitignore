@@ -1,7 +1,6 @@
-.vs/
-out/
-
 # Environment specific files
+.vs/
+
+# Build files
 compile_commands.json
-.clang-format
-.clangd
+out/

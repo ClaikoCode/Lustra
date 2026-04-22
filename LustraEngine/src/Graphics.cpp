@@ -88,7 +88,7 @@ namespace
 
 		PRINT_LOG(
 		    formatString,
-		    properties.deviceName,
+		    static_cast<const char*>(properties.deviceName),
 		    ::VkPhysicalDeviceTypeToString(properties.deviceType),
 		    vkAPIMajor,
 		    vkAPIMinor,

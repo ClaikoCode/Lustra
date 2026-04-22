@@ -8,3 +8,11 @@ This engine is a work in progress and to keep the projects scope and complexity 
 * Older graphics hardware that doesnt support hardware accelerated ray tracing capabilities
 * Graphics APIs other than Vulkan
 * Mobile GPUs
+
+## Install Notes
+
+If running on Ubuntu 24.04 LTS or older:
+
+- Redirect apt to use later versions of CMake (3.30 or newer)
+- Download and extract the SDK tarbal (https://vulkan.lunarg.com/sdk/home#linux), followed by putting a reference to `downloaded-sdk-version/setup-env.sh` in your `~/.bashrc`
+- Install SDL3 dependencies (https://wiki.libsdl.org/SDL3/README-linux#build-dependencies)

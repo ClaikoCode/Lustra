@@ -61,6 +61,11 @@ bool App::RunApp()
 		if (event.type == SDL_EVENT_KEY_DOWN)
 		{
 			PRINT_LOG("Key {} was pressed!", SDL_GetKeyName(event.key.key));
+
+			if (event.key.key == SDLK_ESCAPE)
+			{
+				shouldQuit = true;
+			}
 		}
 	}
 

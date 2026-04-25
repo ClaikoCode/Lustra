@@ -67,6 +67,9 @@ VK_DEFINE_STYPE(VkSamplerCreateInfo,                   	VK_STRUCTURE_TYPE_SAMPLE
 VK_DEFINE_STYPE(VkFramebufferCreateInfo,               	VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO);
 VK_DEFINE_STYPE(VkDebugUtilsMessengerCreateInfoEXT,		VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT);
 VK_DEFINE_STYPE(VkDebugUtilsObjectNameInfoEXT,         	VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT);
+VK_DEFINE_STYPE(VkDeviceQueueCreateInfo,         		VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO);
+VK_DEFINE_STYPE(VkPhysicalDeviceFeatures2,         		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
+VK_DEFINE_STYPE(VkQueueFamilyProperties2,         		VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 // clang-format on
 
 struct VkInitProxy
@@ -119,5 +122,74 @@ namespace Graphics
 			default:
 				return "UNHANDLED VK RESULT STRING";
 		}
+	}
+
+	constexpr const char* VkDeviceFeatureToString(size_t fieldIndex)
+	{
+		constexpr const char* kDeviceFeatureFriendlyNames[] = {
+		    "Robust Buffer Access",
+		    "Full Draw Index UInt32",
+		    "Image Cube Array",
+		    "Independent Blend",
+		    "Geometry Shader",
+		    "Tessellation Shader",
+		    "Sample Rate Shading",
+		    "Dual Source Blend",
+		    "Logic Op",
+		    "Multi Draw Indirect",
+		    "Draw Indirect First Instance",
+		    "Depth Clamp",
+		    "Depth Bias Clamp",
+		    "Fill Mode Non-Solid",
+		    "Depth Bounds",
+		    "Wide Lines",
+		    "Large Points",
+		    "Alpha To One",
+		    "Multi Viewport",
+		    "Sampler Anisotropy",
+		    "Texture Compression ETC2",
+		    "Texture Compression ASTC LDR",
+		    "Texture Compression BC",
+		    "Occlusion Query Precise",
+		    "Pipeline Statistics Query",
+		    "Vertex Pipeline Stores And Atomics",
+		    "Fragment Stores And Atomics",
+		    "Shader Tessellation And Geometry Point Size",
+		    "Shader Image Gather Extended",
+		    "Shader Storage Image Extended Formats",
+		    "Shader Storage Image Multisample",
+		    "Shader Storage Image Read Without Format",
+		    "Shader Storage Image Write Without Format",
+		    "Shader Uniform Buffer Array Dynamic Indexing",
+		    "Shader Sampled Image Array Dynamic Indexing",
+		    "Shader Storage Buffer Array Dynamic Indexing",
+		    "Shader Storage Image Array Dynamic Indexing",
+		    "Shader Clip Distance",
+		    "Shader Cull Distance",
+		    "Shader Float64",
+		    "Shader Int64",
+		    "Shader Int16",
+		    "Shader Resource Residency",
+		    "Shader Resource Min LOD",
+		    "Sparse Binding",
+		    "Sparse Residency Buffer",
+		    "Sparse Residency Image 2D",
+		    "Sparse Residency Image 3D",
+		    "Sparse Residency 2 Samples",
+		    "Sparse Residency 4 Samples",
+		    "Sparse Residency 8 Samples",
+		    "Sparse Residency 16 Samples",
+		    "Sparse Residency Aliased",
+		    "Variable Multisample Rate",
+		    "Inherited Queries",
+		};
+
+		static_assert(
+		    sizeof(kDeviceFeatureFriendlyNames) / sizeof(const char*) ==
+		        sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32),
+		    "Device feature friendly name array is out of sync with VkPhysicalDeviceFeatures"
+		);
+
+		return kDeviceFeatureFriendlyNames[fieldIndex];
 	}
 } // namespace Graphics

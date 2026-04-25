@@ -100,7 +100,6 @@ namespace
 		    properties.deviceID
 		);
 	}
-
 } // namespace
 
 namespace Graphics
@@ -133,6 +132,7 @@ namespace Graphics
 			destroyDebugUtilsFunc(gVkInstance, gVkDebugMessenger, gVkAllocationCallbacks);
 		}
 
+		vkDestroyDevice(gVkDevice, gVkAllocationCallbacks);
 		vkDestroyInstance(gVkInstance, gVkAllocationCallbacks);
 	}
 
@@ -229,11 +229,13 @@ namespace Graphics
 			vkGetPhysicalDeviceProperties(physicalDevice, &properties);
 			vkGetPhysicalDeviceFeatures(physicalDevice, &features);
 
+			// Always print list of physical devices available to get an overview of the system.
 			::PrintPhysicalDeviceProperties(properties);
 
 			// Only check for suitable device if none has been found yet.
 			if (suitablePhysicalDevice == VK_NULL_HANDLE)
 			{
+				// Assume to be true and go through checks to verify.
 				bool isSuitableDevice = true;
 
 				isSuitableDevice &= (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
@@ -249,6 +251,100 @@ namespace Graphics
 		ENSURE_EX(suitablePhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
 
 		PRINT_LOG("Chosen physical device: '{}'", suitablePhysicalDeviceProperties.deviceName);
+
+		VkPhysicalDeviceFeatures2 requestedDeviceFeatures = vkInitStruct();
+		VkPhysicalDeviceFeatures2 availableDeviceFeatures = vkInitStruct();
+
+		vkGetPhysicalDeviceFeatures2(suitablePhysicalDevice, &availableDeviceFeatures);
+
+		PRINT_LOG("====== DEVICE FEATURES ======");
+
+		const VkBool32* requestedDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&requestedDeviceFeatures.features);
+		const VkBool32* availableDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&availableDeviceFeatures.features);
+		bool requestedFeaturesMissing              = false;
+		for (size_t i = 0; i < sizeof(VkPhysicalDeviceFeatures2::features) / sizeof(VkBool32); i++)
+		{
+			bool featureIsMissing      = false;
+			const char* featureSupport = "NOT USED";
+			if (requestedDeviceFeaturesArr[i] == VK_TRUE)
+			{
+				if (availableDeviceFeaturesArr[i] == VK_FALSE)
+				{
+					featureIsMissing = true;
+
+					featureSupport = "MISSING";
+				}
+				else
+				{
+					featureSupport = "FOUND";
+				}
+			}
+
+			PRINT_LOG("[{:^10}] {}", featureSupport, VkDeviceFeatureToString(i));
+
+			requestedFeaturesMissing |= featureIsMissing;
+		}
+
+		ENSURE_EX(requestedFeaturesMissing == false, "Device does not support all features that were requested.");
+
+		PRINT_LOG("=============================");
+
+		const float priority                    = 1.0f;
+		VkDeviceQueueCreateInfo queueCreateInfo = vkInitStruct();
+		queueCreateInfo.queueCount              = 1;
+		queueCreateInfo.queueFamilyIndex        = 0;
+		queueCreateInfo.pQueuePriorities        = &priority;
+
+		VkDeviceCreateInfo deviceCreateInfo   = vkInitStruct();
+		deviceCreateInfo.queueCreateInfoCount = 1;
+		deviceCreateInfo.pQueueCreateInfos    = &queueCreateInfo;
+		deviceCreateInfo.pNext                = &requestedDeviceFeatures; // Only use what is requested.
+
+		ASSERT_VK(vkCreateDevice(suitablePhysicalDevice, &deviceCreateInfo, gVkAllocationCallbacks, &gVkDevice));
+
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties2(suitablePhysicalDevice, &queueFamilyCount, nullptr);
+
+		std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamilyCount);
+
+		// Type has to be filled because of pNext chaining.
+		for (VkQueueFamilyProperties2& properties : queueFamilyProperties)
+		{
+			properties = vkInitStruct();
+		}
+
+		vkGetPhysicalDeviceQueueFamilyProperties2(
+		    suitablePhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
+		);
+
+		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
+		{
+			const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
+
+			const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
+			const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
+			const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
+
+			if (hasGraphicsBit && !gQueueFamilyIndices.graphics)
+			{
+				gQueueFamilyIndices.graphics = i;
+			}
+
+			if (hasComputeBit && !hasGraphicsBit && !gQueueFamilyIndices.compute)
+			{
+				gQueueFamilyIndices.compute = i;
+			}
+
+			if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && !gQueueFamilyIndices.transfer)
+			{
+				gQueueFamilyIndices.transfer = i;
+			}
+		}
+
+		// Check that all queues were found.
+		CHECK(gQueueFamilyIndices.graphics);
+		CHECK(gQueueFamilyIndices.compute);
+		CHECK(gQueueFamilyIndices.transfer);
 	}
 
 	void SetupDebugMessenger()

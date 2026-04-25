@@ -3,6 +3,7 @@
 #include "vulkan/vulkan.h"
 
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -22,9 +23,15 @@ namespace Graphics
 	constexpr VkAllocationCallbacks* gVkAllocationCallbacks = nullptr;
 
 	inline VkInstance gVkInstance                     = {};
-	inline VkPhysicalDevice gVkPhysicalDevice         = {};
 	inline VkDevice gVkDevice                         = {};
 	inline VkDebugUtilsMessengerEXT gVkDebugMessenger = nullptr;
+
+	inline struct QueueFamilyIndices
+	{
+		std::optional<uint32_t> graphics;
+		std::optional<uint32_t> compute;
+		std::optional<uint32_t> transfer;
+	} gQueueFamilyIndices;
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	// Can be supplied with external

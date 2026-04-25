@@ -1,9 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <format>
 #include <string>
 #include <string_view>
-#include <cstdint>
 
 // clang-format off
 #define ANSI_BLACK		"\033[0;30m"
@@ -40,8 +40,8 @@ namespace LustraLib
 		// Controlls if the full system path for the file should be printed.
 		bool printFullPath = false;
 
-		// Controlls if message should include source location (filepath, funcname, line).
-		// Disabling this can be useful if the print location itself is not important/would be missleading.
+		// Controls if message should include source location (filepath, funcname, line).
+		// Disabling this can be useful if the print location itself is not important/would be confusing or missleading.
 		bool printSourceLocationInfo = true;
 
 	} gLoggerOptions;
@@ -86,3 +86,9 @@ namespace LustraLib
 #define PRINT_ERROR(message, ...)                                                                                      \
 	LustraLib::Print(LustraLib::OutputLevelError, __FILE__, __func__, __LINE__, message __VA_OPT__(,) __VA_ARGS__)
 // clang-format on
+
+#define LOGGER_DISABLE_LOCATION()                                                                                      \
+	const bool _loggerLocPrev                         = LustraLib::gLoggerOptions.printSourceLocationInfo;             \
+	LustraLib::gLoggerOptions.printSourceLocationInfo = false
+
+#define LOGGER_RESTORE_LOCATION() LustraLib::gLoggerOptions.printSourceLocationInfo = _loggerLocPrev

@@ -2,6 +2,8 @@
 
 #include "GraphicsUtils.h"
 #include "LustraLib/LustraLib.h"
+#include "SDL3/SDL_vulkan.h"
+#include "SDLAssert.h"
 
 #include <vector>
 
@@ -100,11 +102,26 @@ namespace
 		    properties.deviceID
 		);
 	}
+
+	std::vector<const char*> GetSDLInstanceExtensions()
+	{
+		uint32_t sdlInstanceExtensionsCount      = 0;
+		const char* const* sdlInstanceExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlInstanceExtensionsCount);
+		ASSERT_SDL(sdlInstanceExtensions != nullptr, "Unable to get Vulkan instance extensions required by SDL");
+
+		std::vector<const char*> externalRequestedExtensions(sdlInstanceExtensionsCount);
+		for (uint32_t i = 0; i < sdlInstanceExtensionsCount; i++)
+		{
+			externalRequestedExtensions[i] = sdlInstanceExtensions[i];
+		}
+
+		return externalRequestedExtensions;
+	}
 } // namespace
 
 namespace Graphics
 {
-	void SetupVulkan(const std::string_view appName, const std::vector<const char*>& externalRequestedExtensions)
+	void SetupVulkan(std::string_view appName, const Window& window)
 	{
 		PRINT_DEBUG("Setting up Vulkan.");
 
@@ -115,9 +132,10 @@ namespace Graphics
 		applicationInfo.pEngineName        = "Lustra Engine";
 		applicationInfo.engineVersion      = gEngineVersion;
 
-		SetupInstance(applicationInfo, externalRequestedExtensions);
+		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
 		SetupDevice();
 		SetupDebugMessenger();
+		SetupSwapchain(window);
 	}
 
 	void TearDownVulkan()
@@ -132,6 +150,8 @@ namespace Graphics
 			destroyDebugUtilsFunc(gVkInstance, gVkDebugMessenger, gVkAllocationCallbacks);
 		}
 
+		vkDestroySwapchainKHR(gVkDevice, gVkSwapchain, gVkAllocationCallbacks);
+		vkDestroySurfaceKHR(gVkInstance, gVkSurface, gVkAllocationCallbacks);
 		vkDestroyDevice(gVkDevice, gVkAllocationCallbacks);
 		vkDestroyInstance(gVkInstance, gVkAllocationCallbacks);
 	}
@@ -141,7 +161,7 @@ namespace Graphics
 	)
 	{
 		// NOTE: This is allowed to contain duplicate strings of the same extension.
-		std::vector<const char*> instanceExtensions = {"VK_KHR_surface"};
+		std::vector<const char*> instanceExtensions = {"VK_KHR_surface", "VK_KHR_get_surface_capabilities2"};
 		for (const char* externalExtension : externalRequestedExtensions)
 		{
 			instanceExtensions.push_back(externalExtension);
@@ -219,8 +239,7 @@ namespace Graphics
 		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
 		ASSERT_VK(vkEnumeratePhysicalDevices(gVkInstance, &deviceCount, physicalDevices.data()));
 
-		VkPhysicalDevice suitablePhysicalDevice                     = VK_NULL_HANDLE;
-		VkPhysicalDeviceProperties suitablePhysicalDeviceProperties = {};
+		VkPhysicalDeviceProperties chosenPhysicalDeviceProperties = {};
 		for (VkPhysicalDevice physicalDevice : physicalDevices)
 		{
 			VkPhysicalDeviceFeatures features     = {};
@@ -233,7 +252,7 @@ namespace Graphics
 			::PrintPhysicalDeviceProperties(properties);
 
 			// Only check for suitable device if none has been found yet.
-			if (suitablePhysicalDevice == VK_NULL_HANDLE)
+			if (gVkPhysicalDevice == VK_NULL_HANDLE)
 			{
 				// Assume to be true and go through checks to verify.
 				bool isSuitableDevice = true;
@@ -242,52 +261,86 @@ namespace Graphics
 
 				if (isSuitableDevice)
 				{
-					suitablePhysicalDevice           = physicalDevice;
-					suitablePhysicalDeviceProperties = properties;
+					gVkPhysicalDevice              = physicalDevice;
+					chosenPhysicalDeviceProperties = properties;
 				}
 			}
 		}
 
-		ENSURE_EX(suitablePhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
+		ENSURE_EX(gVkPhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
 
-		PRINT_LOG("Chosen physical device: '{}'", suitablePhysicalDeviceProperties.deviceName);
+		PRINT_LOG("Chosen physical device: '{}'", chosenPhysicalDeviceProperties.deviceName);
 
 		VkPhysicalDeviceFeatures2 requestedDeviceFeatures = vkInitStruct();
-		VkPhysicalDeviceFeatures2 availableDeviceFeatures = vkInitStruct();
-
-		vkGetPhysicalDeviceFeatures2(suitablePhysicalDevice, &availableDeviceFeatures);
-
-		PRINT_LOG("====== DEVICE FEATURES ======");
-
-		const VkBool32* requestedDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&requestedDeviceFeatures.features);
-		const VkBool32* availableDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&availableDeviceFeatures.features);
-		bool requestedFeaturesMissing              = false;
-		for (size_t i = 0; i < sizeof(VkPhysicalDeviceFeatures2::features) / sizeof(VkBool32); i++)
+		// Check if requested device features are available
 		{
-			bool featureIsMissing      = false;
-			const char* featureSupport = "NOT USED";
-			if (requestedDeviceFeaturesArr[i] == VK_TRUE)
-			{
-				if (availableDeviceFeaturesArr[i] == VK_FALSE)
-				{
-					featureIsMissing = true;
+			VkPhysicalDeviceFeatures2 availableDeviceFeatures = vkInitStruct();
+			vkGetPhysicalDeviceFeatures2(gVkPhysicalDevice, &availableDeviceFeatures);
 
-					featureSupport = "MISSING";
-				}
-				else
+			PRINT_LOG("====== DEVICE FEATURES ======");
+
+			const VkBool32* requestedDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&requestedDeviceFeatures.features);
+			const VkBool32* availableDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&availableDeviceFeatures.features);
+			bool requestedFeaturesMissing              = false;
+			for (size_t i = 0; i < sizeof(VkPhysicalDeviceFeatures2::features) / sizeof(VkBool32); i++)
+			{
+				bool featureIsMissing      = false;
+				const char* featureSupport = "NOT USED";
+				if (requestedDeviceFeaturesArr[i] == VK_TRUE)
 				{
-					featureSupport = "FOUND";
+					if (availableDeviceFeaturesArr[i] == VK_FALSE)
+					{
+						featureIsMissing = true;
+
+						featureSupport = "MISSING";
+					}
+					else
+					{
+						featureSupport = "FOUND";
+					}
 				}
+
+				PRINT_LOG("[{:^10}] {}", featureSupport, VkDeviceFeatureToString(i));
+
+				requestedFeaturesMissing |= featureIsMissing;
 			}
 
-			PRINT_LOG("[{:^10}] {}", featureSupport, VkDeviceFeatureToString(i));
+			ENSURE_EX(requestedFeaturesMissing == false, "Device does not support all features that were requested.");
 
-			requestedFeaturesMissing |= featureIsMissing;
+			PRINT_LOG("=============================");
 		}
 
-		ENSURE_EX(requestedFeaturesMissing == false, "Device does not support all features that were requested.");
+		std::vector<const char*> const requestedDeviceExtensions = {"VK_KHR_swapchain"};
 
-		PRINT_LOG("=============================");
+		// Check if requested device extensions are available
+		{
+			uint32_t extensionCount = 0;
+			ASSERT_VK(vkEnumerateDeviceExtensionProperties(gVkPhysicalDevice, nullptr, &extensionCount, nullptr));
+
+			std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+			ASSERT_VK(vkEnumerateDeviceExtensionProperties(
+			    gVkPhysicalDevice, nullptr, &extensionCount, availableExtensions.data()
+			));
+
+			for (const char* requestedExtensionName : requestedDeviceExtensions)
+			{
+				bool requestedExtensionFound = false;
+				for (const VkExtensionProperties& availableExtension : availableExtensions)
+				{
+					if (std::string_view(availableExtension.extensionName) == std::string_view(requestedExtensionName))
+					{
+						requestedExtensionFound = true;
+						break;
+					}
+				}
+
+				if (!requestedExtensionFound)
+				{
+					PRINT_ERROR("Requested device extension '{}' was not found.", requestedExtensionName);
+					LUSTRA_ASSERT(false);
+				}
+			}
+		}
 
 		const float priority                    = 1.0f;
 		VkDeviceQueueCreateInfo queueCreateInfo = vkInitStruct();
@@ -295,56 +348,55 @@ namespace Graphics
 		queueCreateInfo.queueFamilyIndex        = 0;
 		queueCreateInfo.pQueuePriorities        = &priority;
 
-		VkDeviceCreateInfo deviceCreateInfo   = vkInitStruct();
-		deviceCreateInfo.queueCreateInfoCount = 1;
-		deviceCreateInfo.pQueueCreateInfos    = &queueCreateInfo;
-		deviceCreateInfo.pNext                = &requestedDeviceFeatures; // Only use what is requested.
+		// Only use device features and device extensions that are requested.
+		VkDeviceCreateInfo deviceCreateInfo      = vkInitStruct();
+		deviceCreateInfo.queueCreateInfoCount    = 1;
+		deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
+		deviceCreateInfo.pNext                   = &requestedDeviceFeatures;
+		deviceCreateInfo.enabledExtensionCount   = requestedDeviceExtensions.size();
+		deviceCreateInfo.ppEnabledExtensionNames = requestedDeviceExtensions.data();
 
-		ASSERT_VK(vkCreateDevice(suitablePhysicalDevice, &deviceCreateInfo, gVkAllocationCallbacks, &gVkDevice));
+		ASSERT_VK(vkCreateDevice(gVkPhysicalDevice, &deviceCreateInfo, gVkAllocationCallbacks, &gVkDevice));
 
-		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties2(suitablePhysicalDevice, &queueFamilyCount, nullptr);
-
-		std::vector<VkQueueFamilyProperties2> queueFamilyProperties(queueFamilyCount);
-
-		// Type has to be filled because of pNext chaining.
-		for (VkQueueFamilyProperties2& properties : queueFamilyProperties)
+		// Search for common queue families (only after digital device has been created)
 		{
-			properties = vkInitStruct();
+			uint32_t queueFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties2(gVkPhysicalDevice, &queueFamilyCount, nullptr);
+
+			std::vector<VkQueueFamilyProperties2> queueFamilyProperties = vkInitStructs(queueFamilyCount);
+			vkGetPhysicalDeviceQueueFamilyProperties2(
+			    gVkPhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
+			);
+
+			for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
+			{
+				const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
+
+				const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
+				const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
+				const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
+
+				if (hasGraphicsBit && !gQueueFamilyIndices.graphics.has_value())
+				{
+					gQueueFamilyIndices.graphics = i;
+				}
+
+				if (hasComputeBit && !hasGraphicsBit && !gQueueFamilyIndices.compute.has_value())
+				{
+					gQueueFamilyIndices.compute = i;
+				}
+
+				if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && !gQueueFamilyIndices.transfer.has_value())
+				{
+					gQueueFamilyIndices.transfer = i;
+				}
+			}
+
+			// Check that all queues were found.
+			CHECK(gQueueFamilyIndices.graphics.has_value());
+			CHECK(gQueueFamilyIndices.compute.has_value());
+			CHECK(gQueueFamilyIndices.transfer.has_value());
 		}
-
-		vkGetPhysicalDeviceQueueFamilyProperties2(
-		    suitablePhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
-		);
-
-		for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
-		{
-			const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
-
-			const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
-			const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
-			const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
-
-			if (hasGraphicsBit && !gQueueFamilyIndices.graphics)
-			{
-				gQueueFamilyIndices.graphics = i;
-			}
-
-			if (hasComputeBit && !hasGraphicsBit && !gQueueFamilyIndices.compute)
-			{
-				gQueueFamilyIndices.compute = i;
-			}
-
-			if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && !gQueueFamilyIndices.transfer)
-			{
-				gQueueFamilyIndices.transfer = i;
-			}
-		}
-
-		// Check that all queues were found.
-		CHECK(gQueueFamilyIndices.graphics);
-		CHECK(gQueueFamilyIndices.compute);
-		CHECK(gQueueFamilyIndices.transfer);
 	}
 
 	void SetupDebugMessenger()
@@ -369,5 +421,67 @@ namespace Graphics
 		ENSURE_EX(debugUtilsFunc != nullptr, "Could not load debug utils EXT.");
 
 		ASSERT_VK(debugUtilsFunc(gVkInstance, &debugMessengerCreateInfo, gVkAllocationCallbacks, &gVkDebugMessenger));
+	}
+
+	void SetupSwapchain(const Window& window)
+	{
+		auto* sdlWindow = reinterpret_cast<SDL_Window*>(window.GetWindow());
+		ASSERT_SDL(
+		    SDL_Vulkan_CreateSurface(sdlWindow, gVkInstance, gVkAllocationCallbacks, &gVkSurface),
+		    "Could not create Vulkan surface"
+		);
+
+		// Find what surface formats the physical device supports
+		{
+			VkPhysicalDeviceSurfaceInfo2KHR physicalDeviceSurfaceInfo = vkInitStruct();
+			physicalDeviceSurfaceInfo.surface                         = gVkSurface;
+
+			uint32_t surfaceCount;
+			ASSERT_VK(vkGetPhysicalDeviceSurfaceFormats2KHR(
+			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCount, nullptr
+			));
+
+			std::vector<VkSurfaceFormat2KHR> surfaceFormats = vkInitStructs(surfaceCount);
+			ASSERT_VK(vkGetPhysicalDeviceSurfaceFormats2KHR(
+			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCount, surfaceFormats.data()
+			));
+
+			bool foundRequestedSurfaceFormat = false;
+			for (const VkSurfaceFormat2KHR& availableSurfaceFormat : surfaceFormats)
+			{
+				// Do the structs contain the exact same data?
+				if (std::memcmp(
+				        &availableSurfaceFormat.surfaceFormat, &gTargetSurfaceFormat, sizeof(VkSurfaceFormatKHR)
+				    ) == 0)
+				{
+					foundRequestedSurfaceFormat = true;
+					break;
+				}
+			}
+
+			ENSURE_EX(foundRequestedSurfaceFormat, "Physical device does not support requested surface format");
+		}
+
+		VkExtent2D imageExtent = {};
+		window.GetExtentInPixels(imageExtent.width, imageExtent.height);
+
+		VkSwapchainCreateInfoKHR swapchainCreateInfo = vkInitStruct();
+		swapchainCreateInfo.surface                  = gVkSurface;
+		swapchainCreateInfo.minImageCount            = gSwapchainImages.size();
+		swapchainCreateInfo.imageFormat              = gTargetSurfaceFormat.format;
+		swapchainCreateInfo.imageColorSpace          = gTargetSurfaceFormat.colorSpace;
+		swapchainCreateInfo.imageExtent              = imageExtent;
+		swapchainCreateInfo.imageArrayLayers         = 1;
+		swapchainCreateInfo.imageUsage               = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		swapchainCreateInfo.presentMode              = VK_PRESENT_MODE_IMMEDIATE_KHR;
+		swapchainCreateInfo.imageSharingMode         = VK_SHARING_MODE_EXCLUSIVE;
+		swapchainCreateInfo.preTransform             = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+		swapchainCreateInfo.compositeAlpha           = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		swapchainCreateInfo.clipped                  = VK_TRUE;
+
+		ASSERT_VK(vkCreateSwapchainKHR(gVkDevice, &swapchainCreateInfo, gVkAllocationCallbacks, &gVkSwapchain));
+
+		uint32_t imageCount = gSwapchainImages.size();
+		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, gSwapchainImages.data()));
 	}
 } // namespace Graphics

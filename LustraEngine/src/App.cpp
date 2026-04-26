@@ -9,20 +9,6 @@
 
 namespace
 {
-	std::vector<const char*> GetSDLInstanceExtensions()
-	{
-		uint32_t sdlInstanceExtensionsCount      = 0;
-		const char* const* sdlInstanceExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlInstanceExtensionsCount);
-		ASSERT_SDL(sdlInstanceExtensions != nullptr, "Unable to get Vulkan instance extensions required by SDL");
-
-		std::vector<const char*> externalRequestedExtensions(sdlInstanceExtensionsCount);
-		for (uint32_t i = 0; i < sdlInstanceExtensionsCount; i++)
-		{
-			externalRequestedExtensions[i] = sdlInstanceExtensions[i];
-		}
-
-		return externalRequestedExtensions;
-	}
 } // namespace
 
 App::App(const char* appName) : m_name(appName)
@@ -45,7 +31,7 @@ App::~App()
 
 bool App::RunApp()
 {
-	Graphics::SetupVulkan(m_name, GetSDLInstanceExtensions());
+	Graphics::SetupVulkan(m_name, m_window);
 
 	SDL_Event event = {};
 	bool shouldQuit = false;

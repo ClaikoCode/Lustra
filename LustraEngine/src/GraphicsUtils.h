@@ -2,6 +2,8 @@
 
 #include "vulkan/vulkan.h"
 
+#include <vector>
+
 #define ENUM_TO_S(enumValue)                                                                                           \
 	case enumValue:                                                                                                    \
 		return #enumValue;
@@ -70,6 +72,8 @@ VK_DEFINE_STYPE(VkDebugUtilsObjectNameInfoEXT,         	VK_STRUCTURE_TYPE_DEBUG_
 VK_DEFINE_STYPE(VkDeviceQueueCreateInfo,         		VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO);
 VK_DEFINE_STYPE(VkPhysicalDeviceFeatures2,         		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
 VK_DEFINE_STYPE(VkQueueFamilyProperties2,         		VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
+VK_DEFINE_STYPE(VkPhysicalDeviceSurfaceInfo2KHR,        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR);
+VK_DEFINE_STYPE(VkSurfaceFormat2KHR,        			VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
 // clang-format on
 
 struct VkInitProxy
@@ -89,6 +93,33 @@ struct VkInitProxy
 constexpr VkInitProxy vkInitStruct()
 {
 	return {};
+}
+
+struct VkInitVectorProxy
+{
+	uint32_t count;
+
+	template <typename T>
+	constexpr operator std::vector<T>() const
+	{
+		std::vector<T> structVector(count);
+
+		for (T& vkStruct : structVector)
+		{
+			vkStruct = vkInitStruct();
+		}
+
+		return structVector;
+	}
+};
+
+// Similar to vkInitStruct but instead pre fills a vector of vk structs with their correct structure type.
+// Type has to be filled even if the next call will fill the struct data. This is because of pNext chaining, which seems
+// more prevalent with revisions/updates/extensions of Vulkan getter functions.
+// Example: std::vector<VkSurfaceFormat2KHR> surfaceFormats = vkInitStructs(surfaceCount);
+inline VkInitVectorProxy vkInitStructs(uint32_t count)
+{
+	return {count};
 }
 
 // =================================
@@ -187,7 +218,7 @@ namespace Graphics
 		static_assert(
 		    sizeof(kDeviceFeatureFriendlyNames) / sizeof(const char*) ==
 		        sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32),
-		    "Device feature friendly name array is out of sync with VkPhysicalDeviceFeatures"
+		    "Device feature friendly name array is out of sync with VkPhysicalDeviceFeatures."
 		);
 
 		return kDeviceFeatureFriendlyNames[fieldIndex];

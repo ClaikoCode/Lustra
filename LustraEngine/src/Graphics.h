@@ -15,6 +15,9 @@
 	#define USE_VALIDATION_LAYERS (false)
 #endif
 
+// Useful for checking a valid uint32_t value. The vast majority of the time, this value is never valid.
+#define NULL_UINT32 (UINT32_MAX)
+
 namespace Graphics
 {
 	constexpr uint32_t gEngineVersion       = VK_MAKE_API_VERSION(0, 1, 0, 0);
@@ -39,9 +42,9 @@ namespace Graphics
 
 	inline struct QueueFamilyIndices
 	{
-		std::optional<uint32_t> graphics;
-		std::optional<uint32_t> compute;
-		std::optional<uint32_t> transfer;
+		uint32_t graphics = NULL_UINT32;
+		uint32_t compute  = NULL_UINT32;
+		uint32_t transfer = NULL_UINT32;
 	} gQueueFamilyIndices;
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.

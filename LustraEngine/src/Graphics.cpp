@@ -133,8 +133,8 @@ namespace Graphics
 		applicationInfo.engineVersion      = gEngineVersion;
 
 		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
-		SetupDevice();
 		SetupDebugMessenger();
+		SetupDevice();
 		SetupSwapchain(window);
 	}
 
@@ -144,10 +144,10 @@ namespace Graphics
 
 		if (gUseValidationLayers)
 		{
-			auto destroyDebugUtilsFunc = VK_LOAD_INSTANCE_FUNC(vkDestroyDebugUtilsMessengerEXT);
-			ENSURE(destroyDebugUtilsFunc != nullptr);
+			auto vkDestroyDebugUtilsMessengerEXT = VK_LOAD_INSTANCE_FUNC(vkDestroyDebugUtilsMessengerEXT);
+			ENSURE(vkDestroyDebugUtilsMessengerEXT != nullptr);
 
-			destroyDebugUtilsFunc(gVkInstance, gVkDebugMessenger, gVkAllocationCallbacks);
+			vkDestroyDebugUtilsMessengerEXT(gVkInstance, gVkDebugMessenger, gVkAllocationCallbacks);
 		}
 
 		vkDestroySwapchainKHR(gVkDevice, gVkSwapchain, gVkAllocationCallbacks);
@@ -310,6 +310,46 @@ namespace Graphics
 			PRINT_LOG("=============================");
 		}
 
+		// Search for common queue families available to the physical device
+		{
+			uint32_t queueFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties2(gVkPhysicalDevice, &queueFamilyCount, nullptr);
+
+			std::vector<VkQueueFamilyProperties2> queueFamilyProperties = vkInitStructs(queueFamilyCount);
+			vkGetPhysicalDeviceQueueFamilyProperties2(
+			    gVkPhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
+			);
+
+			for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
+			{
+				const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
+
+				const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
+				const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
+				const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
+
+				if (hasGraphicsBit && gQueueFamilyIndices.graphics == NULL_UINT32)
+				{
+					gQueueFamilyIndices.graphics = i;
+				}
+
+				if (hasComputeBit && !hasGraphicsBit && gQueueFamilyIndices.compute == NULL_UINT32)
+				{
+					gQueueFamilyIndices.compute = i;
+				}
+
+				if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && gQueueFamilyIndices.transfer == NULL_UINT32)
+				{
+					gQueueFamilyIndices.transfer = i;
+				}
+			}
+
+			// Ensure that all queues were found.
+			ENSURE(gQueueFamilyIndices.graphics != NULL_UINT32);
+			ENSURE(gQueueFamilyIndices.compute != NULL_UINT32);
+			ENSURE(gQueueFamilyIndices.transfer != NULL_UINT32);
+		}
+
 		std::vector<const char*> const requestedDeviceExtensions = {"VK_KHR_swapchain"};
 
 		// Check if requested device extensions are available
@@ -345,7 +385,7 @@ namespace Graphics
 		const float priority                    = 1.0f;
 		VkDeviceQueueCreateInfo queueCreateInfo = vkInitStruct();
 		queueCreateInfo.queueCount              = 1;
-		queueCreateInfo.queueFamilyIndex        = 0;
+		queueCreateInfo.queueFamilyIndex        = gQueueFamilyIndices.graphics;
 		queueCreateInfo.pQueuePriorities        = &priority;
 
 		// Only use device features and device extensions that are requested.
@@ -357,46 +397,6 @@ namespace Graphics
 		deviceCreateInfo.ppEnabledExtensionNames = requestedDeviceExtensions.data();
 
 		ASSERT_VK(vkCreateDevice(gVkPhysicalDevice, &deviceCreateInfo, gVkAllocationCallbacks, &gVkDevice));
-
-		// Search for common queue families (only after digital device has been created)
-		{
-			uint32_t queueFamilyCount = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties2(gVkPhysicalDevice, &queueFamilyCount, nullptr);
-
-			std::vector<VkQueueFamilyProperties2> queueFamilyProperties = vkInitStructs(queueFamilyCount);
-			vkGetPhysicalDeviceQueueFamilyProperties2(
-			    gVkPhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
-			);
-
-			for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
-			{
-				const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
-
-				const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
-				const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
-				const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
-
-				if (hasGraphicsBit && !gQueueFamilyIndices.graphics.has_value())
-				{
-					gQueueFamilyIndices.graphics = i;
-				}
-
-				if (hasComputeBit && !hasGraphicsBit && !gQueueFamilyIndices.compute.has_value())
-				{
-					gQueueFamilyIndices.compute = i;
-				}
-
-				if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && !gQueueFamilyIndices.transfer.has_value())
-				{
-					gQueueFamilyIndices.transfer = i;
-				}
-			}
-
-			// Check that all queues were found.
-			CHECK(gQueueFamilyIndices.graphics.has_value());
-			CHECK(gQueueFamilyIndices.compute.has_value());
-			CHECK(gQueueFamilyIndices.transfer.has_value());
-		}
 	}
 
 	void SetupDebugMessenger()

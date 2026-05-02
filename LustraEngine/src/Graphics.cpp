@@ -21,10 +21,7 @@ namespace
 		UNUSED_VAR(userData);
 		UNUSED_VAR(messageType);
 
-		const bool prevSetting = LustraLib::gLoggerOptions.printSourceLocationInfo;
-
-		// No need to print source location.
-		LustraLib::gLoggerOptions.printSourceLocationInfo = false;
+		LOGGER_DISABLE_LOCATION();
 
 		const char* const message = callbackData->pMessage;
 		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
@@ -36,7 +33,14 @@ namespace
 		}
 		else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 		{
-			PRINT_WARNING("(Vulkan Warning) {}", message);
+			const bool isBestPracticeMessage =
+			    callbackData->pMessageIdName != nullptr &&
+			    std::string_view(callbackData->pMessageIdName).starts_with("BestPractices-");
+
+			const std::string_view warningMessagePrefix =
+			    isBestPracticeMessage ? "(Vulkan Best Practice)" : "(Vulkan Warning)";
+
+			PRINT_WARNING("{} {}", warningMessagePrefix, message);
 		}
 		else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
 		{
@@ -47,7 +51,7 @@ namespace
 			PRINT_LOG("(Vulkan Misc) {}", message);
 		}
 
-		LustraLib::gLoggerOptions.printSourceLocationInfo = prevSetting;
+		LOGGER_RESTORE_LOCATION();
 
 		return VK_FALSE;
 	}
@@ -213,17 +217,28 @@ namespace Graphics
 		instanceCreateInfo.enabledLayerCount       = requestedLayers.size();
 		instanceCreateInfo.ppEnabledLayerNames     = requestedLayers.data();
 
+		// Will create a debug messenger scoped to only instance creation and instance destruction calls.
+		VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo        = vkInitStruct();
+		VkValidationFeaturesEXT validationFeatures                         = vkInitStruct();
+		std::vector<VkValidationFeatureEnableEXT> validationFeatureEnables = {
+		    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+		};
+
 		if (gUseValidationLayers)
 		{
-			// Will create a debug messenger scoped to only instance creation and instance destruction calls.
-			VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo = vkInitStruct();
+			// Debug messenger create info
 			debugMessengerCreateInfo.messageSeverity =
 			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 			debugMessengerCreateInfo.messageType =
 			    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
 			debugMessengerCreateInfo.pfnUserCallback = ::VkDebugMessagingCallback;
 
-			instanceCreateInfo.pNext = &debugMessengerCreateInfo;
+			// Validation features create info
+			validationFeatures.pEnabledValidationFeatures    = validationFeatureEnables.data();
+			validationFeatures.enabledValidationFeatureCount = validationFeatureEnables.size();
+
+			validationFeatures.pNext = &debugMessengerCreateInfo;
+			instanceCreateInfo.pNext = &validationFeatures;
 		}
 
 		ASSERT_VK(vkCreateInstance(&instanceCreateInfo, gVkAllocationCallbacks, &gVkInstance));

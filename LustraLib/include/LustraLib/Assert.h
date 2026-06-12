@@ -48,12 +48,12 @@
 #if defined(_DEBUG) || defined(ENABLE_NON_DEBUG_CHECKS)
 
     // Evalute expression, log, halt program, and exit.
-	#define _LUSTRA_CHECK_BASE(expression, message)                                                                    \
+	#define _LUSTRA_CHECK_BASE(expression, message, ...)                                                               \
 		do                                                                                                             \
 		{                                                                                                              \
 			if ((expression) == false)                                                                                 \
 			{                                                                                                          \
-				PRINT_ERROR("[CHECK ASSERTION FAILED] " message);                                                      \
+				PRINT_ERROR("[CHECK ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                           \
 				_DEBUG_TRAP();                                                                                         \
 				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
@@ -71,12 +71,12 @@
 #if defined(_DEBUG)
 
     // Validate expression, log, halt program, and exit.
-	#define _LUSTRA_VALIDATE_BASE(expression, message)                                                                 \
+	#define _LUSTRA_VALIDATE_BASE(expression, message, ...)                                                            \
 		do                                                                                                             \
 		{                                                                                                              \
 			if ((expression) == false)                                                                                 \
 			{                                                                                                          \
-				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message);                                                   \
+				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                        \
 				_DEBUG_TRAP();                                                                                         \
 				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
@@ -105,12 +105,12 @@
 // ----- ENSURE assertion base macros -----
 
 // Validate expression, log, halt program, and exit.
-#define _LUSTRA_ENSURE_BASE(expression, message)                                                                       \
+#define _LUSTRA_ENSURE_BASE(expression, message, ...)                                                                  \
 	do                                                                                                                 \
 	{                                                                                                                  \
 		if ((expression) == false)                                                                                     \
 		{                                                                                                              \
-			PRINT_ERROR("[ENSURE ASSERTION FAILED] " message);                                                         \
+			PRINT_ERROR("[ENSURE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                              \
 			_DEBUG_TRAP();                                                                                             \
 			_THREAD_SAFE_EXIT();                                                                                       \
 		}                                                                                                              \
@@ -121,16 +121,19 @@
 // CHECK assert macros
 #define CHECK_UNREACHABLE() _LUSTRA_CHECK_BASE(false, "Unreachable code was reached.")
 #define CHECK_NOT_IMPL() _LUSTRA_CHECK_BASE(false, "Unimplemented code.")
-#define CHECK_EX(expression, message) _LUSTRA_CHECK_BASE(expression, "(" #expression "): " message)
+#define CHECK_EX(expression, message, ...)                                                                             \
+	_LUSTRA_CHECK_BASE(expression, "(" #expression "): " message __VA_OPT__(, ) __VA_ARGS__)
 #define CHECK(expression) _LUSTRA_CHECK_BASE(expression, "(" #expression ")")
 
 // VALIDATE assert macros
-#define VALIDATE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "): " message)
+#define VALIDATE_EX(expression, message, ...)                                                                          \
+	_LUSTRA_VALIDATE_BASE(expression, "(" #expression "): " message __VA_OPT__(, ) __VA_ARGS__)
 #define VALIDATE(expression) _LUSTRA_VALIDATE_BASE(expression, "(" #expression ")")
 
 // ENSURE assert macros
-#define ENSURE_EX(expression, message) _LUSTRA_VALIDATE_BASE(expression, "(" #expression "): " message)
-#define ENSURE(expression) _LUSTRA_VALIDATE_BASE(expression, "(" #expression ")")
+#define ENSURE_EX(expression, message, ...)                                                                            \
+	_LUSTRA_ENSURE_BASE(expression, "(" #expression "): " message __VA_OPT__(, ) __VA_ARGS__)
+#define ENSURE(expression) _LUSTRA_ENSURE_BASE(expression, "(" #expression ")")
 
 // Pure assert
 #define LUSTRA_ASSERT(expression)                                                                                      \

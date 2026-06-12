@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: out/build/x64-Debug
+  CompilationDatabase: out/build/x64-debug
 
 
 Diagnostics:

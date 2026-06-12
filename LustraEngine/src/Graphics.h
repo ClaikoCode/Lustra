@@ -38,7 +38,7 @@ namespace Graphics
 	    .format = VK_FORMAT_R8G8B8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
 	};
 
-	inline std::array<VkImage, 2> gSwapchainImages = {{}};
+	inline std::vector<VkImage> gSwapchainImages = {};
 
 	inline struct QueueFamilyIndices
 	{

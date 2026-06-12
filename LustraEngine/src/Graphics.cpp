@@ -121,6 +121,11 @@ namespace
 
 		return externalRequestedExtensions;
 	}
+
+	bool GetSDLPresentationSupport(uint32_t queueFamilyIndex)
+	{
+		return SDL_Vulkan_GetPresentationSupport(Graphics::gVkInstance, Graphics::gVkPhysicalDevice, queueFamilyIndex);
+	}
 } // namespace
 
 namespace Graphics
@@ -345,7 +350,10 @@ namespace Graphics
 
 				if (hasGraphicsBit && gQueueFamilyIndices.graphics == NULL_UINT32)
 				{
-					gQueueFamilyIndices.graphics = i;
+					if (::GetSDLPresentationSupport(i))
+					{
+						gQueueFamilyIndices.graphics = i;
+					}
 				}
 
 				if (hasComputeBit && !hasGraphicsBit && gQueueFamilyIndices.compute == NULL_UINT32)
@@ -446,7 +454,8 @@ namespace Graphics
 		    "Could not create Vulkan surface"
 		);
 
-		// Find what surface formats the physical device supports
+		// Find what surface formats the physical device supports and the capabilities of the surface
+		VkSurfaceCapabilities2KHR surfaceCapabilities2 = vkInitStruct();
 		{
 			VkPhysicalDeviceSurfaceInfo2KHR physicalDeviceSurfaceInfo = vkInitStruct();
 			physicalDeviceSurfaceInfo.surface                         = gVkSurface;
@@ -475,14 +484,56 @@ namespace Graphics
 			}
 
 			ENSURE_EX(foundRequestedSurfaceFormat, "Physical device does not support requested surface format");
+
+			ASSERT_VK(vkGetPhysicalDeviceSurfaceCapabilities2KHR(
+			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCapabilities2
+			));
 		}
 
-		VkExtent2D imageExtent = {};
-		window.GetExtentInPixels(imageExtent.width, imageExtent.height);
+		// Check available presentation modes
+		{
+			uint32_t presentationModeCount;
+			ASSERT_VK(vkGetPhysicalDeviceSurfacePresentModesKHR(
+			    gVkPhysicalDevice, gVkSurface, &presentationModeCount, nullptr
+			));
+
+			std::vector<VkPresentModeKHR> presentationModes(presentationModeCount);
+			ASSERT_VK(vkGetPhysicalDeviceSurfacePresentModesKHR(
+			    gVkPhysicalDevice, gVkSurface, &presentationModeCount, presentationModes.data()
+			));
+
+			// Standard presentation modes.
+			const std::vector<VkPresentModeKHR> requestedPresentationModes = {
+			    VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
+			};
+
+			for (const VkPresentModeKHR requestedPresentMode : requestedPresentationModes)
+			{
+				bool foundPresentMode = false;
+
+				for (const VkPresentModeKHR availablePresentMode : presentationModes)
+				{
+					if (requestedPresentMode == availablePresentMode)
+					{
+						foundPresentMode = true;
+						break;
+					}
+				}
+
+				ENSURE_EX(foundPresentMode, "Could not find requested presentation mode.");
+			}
+		}
+
+		VkExtent2D imageExtent = {surfaceCapabilities2.surfaceCapabilities.currentExtent};
+		// If using Wayland then extent is decided from window.
+		if (surfaceCapabilities2.surfaceCapabilities.currentExtent.width == 0xFFFFFFFF)
+		{
+			window.GetExtentInPixels(imageExtent.width, imageExtent.height);
+		}
 
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = vkInitStruct();
 		swapchainCreateInfo.surface                  = gVkSurface;
-		swapchainCreateInfo.minImageCount            = gSwapchainImages.size();
+		swapchainCreateInfo.minImageCount            = surfaceCapabilities2.surfaceCapabilities.minImageCount;
 		swapchainCreateInfo.imageFormat              = gTargetSurfaceFormat.format;
 		swapchainCreateInfo.imageColorSpace          = gTargetSurfaceFormat.colorSpace;
 		swapchainCreateInfo.imageExtent              = imageExtent;
@@ -496,7 +547,9 @@ namespace Graphics
 
 		ASSERT_VK(vkCreateSwapchainKHR(gVkDevice, &swapchainCreateInfo, gVkAllocationCallbacks, &gVkSwapchain));
 
-		uint32_t imageCount = gSwapchainImages.size();
+		uint32_t imageCount;
+		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, nullptr));
+		gSwapchainImages.resize(imageCount);
 		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, gSwapchainImages.data()));
 	}
 } // namespace Graphics

@@ -24,7 +24,8 @@ If you already cloned without `--recurse-submodules`:
 
 **Linux (Ubuntu 24.04):**
 - clang 18+, cmake 3.30+, ninja
-- Vulkan SDK 1.3+ (tarball from [LunarG](https://vulkan.lunarg.com/sdk/home#linux) and put `downloaded-sdk-version/setup-env.sh` into `~/.bashrc`)
+- Vulkan SDK 1.3+ (follow [Development environment setup](https://vulkan-tutorial.com/Development_environment#page_Linux) for your platform)
+    - Requires: vulkan loader, vulkan tools, vulkan validationlayers, DirectX Compiler (dxc), (more not yet listed). 
 - Install SDL3 [build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies)
 - OTHER DEPENDENCIES NOT YET LISTED
 

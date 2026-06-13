@@ -33,6 +33,7 @@ else()
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
 		add_compile_options(-stdlib=libc++)
 		add_link_options(-stdlib=libc++)
+		string(APPEND CMAKE_CXX_FLAGS_DEBUG " -O0 -fno-omit-frame-pointer -fstandalone-debug")
 	endif()
 endif()
 

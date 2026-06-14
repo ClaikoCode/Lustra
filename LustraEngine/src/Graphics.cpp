@@ -207,11 +207,7 @@ namespace Graphics
 					}
 				}
 
-				if (!requestedLayerIsSupported)
-				{
-					PRINT_ERROR("Requested layer '{}' was not found. Aborting.", requestedLayer);
-					LUSTRA_ASSERT(false);
-				}
+				ENSURE_EX(requestedLayerIsSupported, "Requested layer '{}' was not found.", requestedLayer);
 			}
 		}
 
@@ -397,11 +393,9 @@ namespace Graphics
 					}
 				}
 
-				if (!requestedExtensionFound)
-				{
-					PRINT_ERROR("Requested device extension '{}' was not found.", requestedExtensionName);
-					LUSTRA_ASSERT(false);
-				}
+				ENSURE_EX(
+				    requestedExtensionFound, "Requested device extension '{}' was not found.", requestedExtensionName
+				);
 			}
 		}
 
@@ -483,7 +477,11 @@ namespace Graphics
 				}
 			}
 
-			ENSURE_EX(foundRequestedSurfaceFormat, "Physical device does not support requested surface format");
+			ENSURE_EX(
+			    foundRequestedSurfaceFormat,
+			    "Physical device does not support requested surface format: {}",
+			    Graphics::VkFormatToString(gTargetSurfaceFormat.format)
+			);
 
 			ASSERT_VK(vkGetPhysicalDeviceSurfaceCapabilities2KHR(
 			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCapabilities2
@@ -504,7 +502,7 @@ namespace Graphics
 
 			// Standard presentation modes.
 			const std::vector<VkPresentModeKHR> requestedPresentationModes = {
-			    VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_FIFO_RELAXED_KHR
+			    VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR
 			};
 
 			for (const VkPresentModeKHR requestedPresentMode : requestedPresentationModes)
@@ -520,7 +518,9 @@ namespace Graphics
 					}
 				}
 
-				ENSURE_EX(foundPresentMode, "Could not find requested presentation mode.");
+				ENSURE_EX(
+				    foundPresentMode, "Could not find requested presentation mode: {}", (int)requestedPresentMode
+				);
 			}
 		}
 
@@ -530,6 +530,8 @@ namespace Graphics
 		{
 			window.GetExtentInPixels(imageExtent.width, imageExtent.height);
 		}
+
+		PRINT_DEBUG("Extent: {}, {}", imageExtent.width, imageExtent.height);
 
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = vkInitStruct();
 		swapchainCreateInfo.surface                  = gVkSurface;

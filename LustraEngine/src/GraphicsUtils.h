@@ -1,5 +1,6 @@
 #pragma once
 
+#include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/vulkan.h"
 
 #include <vector>
@@ -224,5 +225,10 @@ namespace Graphics
 		);
 
 		return kDeviceFeatureFriendlyNames[fieldIndex];
+	}
+
+	static inline const char* VkFormatToString(VkFormat format)
+	{
+		return string_VkFormat(format);
 	}
 } // namespace Graphics

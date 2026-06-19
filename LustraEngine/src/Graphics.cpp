@@ -1,3 +1,4 @@
+#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #include "Graphics.h"
 
 #include "GraphicsUtils.h"
@@ -7,14 +8,17 @@
 
 #include <vector>
 
+// Single global default dispatcher storage. Should only pertain to a single TU.
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 namespace
 {
 	// Should return bool that tells if the callback should be aborted. However, returning true is usually only for
 	// testing the validation layers themselves, so returning false is the default behavior.
-	VKAPI_ATTR VkBool32 VKAPI_CALL VkDebugMessagingCallback(
-	    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-	    VkDebugUtilsMessageTypeFlagsEXT messageType,
-	    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+	vk::Bool32 VkDebugMessagingCallback(
+	    vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	    vk::DebugUtilsMessageTypeFlagsEXT messageType,
+	    const vk::DebugUtilsMessengerCallbackDataEXT* callbackData,
 	    void* userData
 	)
 	{
@@ -24,14 +28,14 @@ namespace
 		LOGGER_DISABLE_LOCATION();
 
 		const char* const message = callbackData->pMessage;
-		if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+		if (messageSeverity >= vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
 		{
 			PRINT_ERROR("(Vulkan Error) {}", message);
 
 			// Check stack trace for info on which call triggered the message.
-			_DEBUG_TRAP();
+			LUSTRA_ASSERT(false);
 		}
-		else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		else if (messageSeverity >= vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning)
 		{
 			const bool isBestPracticeMessage =
 			    callbackData->pMessageIdName != nullptr &&
@@ -42,7 +46,7 @@ namespace
 
 			PRINT_WARNING("{} {}", warningMessagePrefix, message);
 		}
-		else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+		else if (messageSeverity >= vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo)
 		{
 			PRINT_DEBUG("(Vulkan Info) {}", message);
 		}
@@ -53,27 +57,29 @@ namespace
 
 		LOGGER_RESTORE_LOCATION();
 
-		return VK_FALSE;
+		return vk::False;
 	}
 
-	const char* VkPhysicalDeviceTypeToString(VkPhysicalDeviceType deviceType)
+	// Gives friendly name for device type.
+	// Already exists in vk::to_string() but I like my strings better.
+	const char* VkPhysicalDeviceTypeToString(vk::PhysicalDeviceType deviceType)
 	{
 		switch (deviceType)
 		{
-			case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+			case vk::PhysicalDeviceType::eIntegratedGpu:
 				return "Integrated GPU";
-			case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+			case vk::PhysicalDeviceType::eDiscreteGpu:
 				return "Discrete GPU";
-			case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+			case vk::PhysicalDeviceType::eVirtualGpu:
 				return "Virtual GPU";
-			case VK_PHYSICAL_DEVICE_TYPE_CPU:
+			case vk::PhysicalDeviceType::eCpu:
 				return "CPU";
 			default:
 				return "Unknown Device Type";
 		}
 	}
 
-	void PrintPhysicalDeviceProperties(const VkPhysicalDeviceProperties& properties)
+	void PrintPhysicalDeviceProperties(const vk::PhysicalDeviceProperties& properties)
 	{
 		constexpr const char* formatString = "\n==== PHYSICAL DEVICE INFO ====\n"
 		                                     "Device Name: 		{}\n"
@@ -134,12 +140,18 @@ namespace Graphics
 	{
 		PRINT_DEBUG("Setting up Vulkan.");
 
-		VkApplicationInfo applicationInfo  = vkInitStruct();
-		applicationInfo.apiVersion         = gTargetVulkanVersion;
-		applicationInfo.pApplicationName   = appName.empty() ? "Default App Name" : appName.data();
-		applicationInfo.applicationVersion = gApplicationVersion;
-		applicationInfo.pEngineName        = "Lustra Engine";
-		applicationInfo.engineVersion      = gEngineVersion;
+		const vk::ApplicationInfo applicationInfo = {
+		    .pApplicationName   = appName.empty() ? "Default App Name" : appName.data(),
+		    .applicationVersion = gApplicationVersion,
+		    .pEngineName        = "Lustra Engine",
+		    .engineVersion      = gEngineVersion,
+		    .apiVersion         = gTargetVulkanVersion,
+		};
+
+		// Setup dynamic loader.
+		const vk::detail::DynamicLoader dl;
+		auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+		vk::detail::defaultDispatchLoaderDynamic.init(vkGetInstanceProcAddr);
 
 		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
 		SetupDebugMessenger();
@@ -153,20 +165,17 @@ namespace Graphics
 
 		if (gUseValidationLayers)
 		{
-			auto vkDestroyDebugUtilsMessengerEXT = VK_LOAD_INSTANCE_FUNC(vkDestroyDebugUtilsMessengerEXT);
-			ENSURE(vkDestroyDebugUtilsMessengerEXT != nullptr);
-
-			vkDestroyDebugUtilsMessengerEXT(gVkInstance, gVkDebugMessenger, gVkAllocationCallbacks);
+			gVkInstance.destroyDebugUtilsMessengerEXT(gVkDebugMessenger, gAllocationCallbacks);
 		}
 
-		vkDestroySwapchainKHR(gVkDevice, gVkSwapchain, gVkAllocationCallbacks);
-		vkDestroySurfaceKHR(gVkInstance, gVkSurface, gVkAllocationCallbacks);
-		vkDestroyDevice(gVkDevice, gVkAllocationCallbacks);
-		vkDestroyInstance(gVkInstance, gVkAllocationCallbacks);
+		gVkDevice.destroySwapchainKHR(gVkSwapchain, gAllocationCallbacks);
+		gVkInstance.destroySurfaceKHR(gVkSurface, gAllocationCallbacks);
+		gVkDevice.destroy(gAllocationCallbacks);
+		gVkInstance.destroy(gAllocationCallbacks);
 	}
 
 	void SetupInstance(
-	    const VkApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
+	    const vk::ApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
 	)
 	{
 		// NOTE: This is allowed to contain duplicate strings of the same extension.
@@ -188,16 +197,12 @@ namespace Graphics
 
 		// Check that requested validation layers are supported by the Vulkan instance.
 		{
-			uint32_t layerCount = 0;
-			ASSERT_VK(vkEnumerateInstanceLayerProperties(&layerCount, nullptr));
-
-			std::vector<VkLayerProperties> instanceLayerProperties(layerCount);
-			ASSERT_VK(vkEnumerateInstanceLayerProperties(&layerCount, instanceLayerProperties.data()));
+			const std::vector<vk::LayerProperties> supportedLayers = AssertVk(vk::enumerateInstanceLayerProperties());
 
 			for (const char* requestedLayer : requestedLayers)
 			{
 				bool requestedLayerIsSupported = false;
-				for (auto supportedLayer : instanceLayerProperties)
+				for (auto supportedLayer : supportedLayers)
 				{
 					if (std::string_view(requestedLayer) == std::string_view(supportedLayer.layerName))
 					{
@@ -211,58 +216,53 @@ namespace Graphics
 			}
 		}
 
-		VkInstanceCreateInfo instanceCreateInfo    = vkInitStruct();
-		instanceCreateInfo.pApplicationInfo        = &vkApplicationInfo;
-		instanceCreateInfo.enabledExtensionCount   = instanceExtensions.size();
-		instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
-		instanceCreateInfo.enabledLayerCount       = requestedLayers.size();
-		instanceCreateInfo.ppEnabledLayerNames     = requestedLayers.data();
-
-		// Will create a debug messenger scoped to only instance creation and instance destruction calls.
-		VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo        = vkInitStruct();
-		VkValidationFeaturesEXT validationFeatures                         = vkInitStruct();
-		std::vector<VkValidationFeatureEnableEXT> validationFeatureEnables = {
-		    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+		vk::DebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo        = {};
+		std::vector<vk::ValidationFeatureEnableEXT> validationFeatureEnables = {
+		    vk::ValidationFeatureEnableEXT::eBestPractices
 		};
 
+		vk::InstanceCreateInfo instanceCreateInfo{
+		    .pApplicationInfo = &vkApplicationInfo,
+		};
+		instanceCreateInfo.setPEnabledExtensionNames(instanceExtensions);
+		instanceCreateInfo.setPEnabledLayerNames(requestedLayers);
+
+		// Will create a debug messenger scoped to only instance creation and instance destruction calls.
+		vk::ValidationFeaturesEXT validationFeatures = {};
 		if (gUseValidationLayers)
 		{
 			// Debug messenger create info
 			debugMessengerCreateInfo.messageSeverity =
-			    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+			    vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning;
 			debugMessengerCreateInfo.messageType =
-			    VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+			    vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation;
 			debugMessengerCreateInfo.pfnUserCallback = ::VkDebugMessagingCallback;
 
-			// Validation features create info
-			validationFeatures.pEnabledValidationFeatures    = validationFeatureEnables.data();
-			validationFeatures.enabledValidationFeatureCount = validationFeatureEnables.size();
+			validationFeatures.setEnabledValidationFeatures(validationFeatureEnables);
 
 			validationFeatures.pNext = &debugMessengerCreateInfo;
 			instanceCreateInfo.pNext = &validationFeatures;
 		}
 
-		ASSERT_VK(vkCreateInstance(&instanceCreateInfo, gVkAllocationCallbacks, &gVkInstance));
+		gVkInstance = AssertVk(vk::createInstance(instanceCreateInfo, gAllocationCallbacks));
+
+		// Load instance level functions.
+		vk::detail::defaultDispatchLoaderDynamic.init(gVkInstance);
 	}
 
 	void SetupDevice()
 	{
-		uint32_t deviceCount = 0;
-		ASSERT_VK(vkEnumeratePhysicalDevices(gVkInstance, &deviceCount, nullptr));
+		const std::vector<vk::PhysicalDevice> physicalDevices = AssertVk(gVkInstance.enumeratePhysicalDevices());
+		ENSURE_EX(!physicalDevices.empty(), "Could not find a GPU with Vulkan support.");
 
-		ENSURE_EX(deviceCount != 0, "Could not find a GPU with Vulkan support.");
-
-		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-		ASSERT_VK(vkEnumeratePhysicalDevices(gVkInstance, &deviceCount, physicalDevices.data()));
-
-		VkPhysicalDeviceProperties chosenPhysicalDeviceProperties = {};
-		for (VkPhysicalDevice physicalDevice : physicalDevices)
+		vk::PhysicalDeviceProperties chosenPhysicalDeviceProperties = {};
+		for (const vk::PhysicalDevice physicalDevice : physicalDevices)
 		{
-			VkPhysicalDeviceFeatures features     = {};
-			VkPhysicalDeviceProperties properties = {};
+			vk::PhysicalDeviceFeatures features     = {};
+			vk::PhysicalDeviceProperties properties = {};
 
-			vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-			vkGetPhysicalDeviceFeatures(physicalDevice, &features);
+			physicalDevice.getFeatures(&features);
+			physicalDevice.getProperties(&properties);
 
 			// Always print list of physical devices available to get an overview of the system.
 			::PrintPhysicalDeviceProperties(properties);
@@ -273,7 +273,7 @@ namespace Graphics
 				// Assume to be true and go through checks to verify.
 				bool isSuitableDevice = true;
 
-				isSuitableDevice &= (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
+				isSuitableDevice &= (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu);
 
 				if (isSuitableDevice)
 				{
@@ -285,22 +285,25 @@ namespace Graphics
 
 		ENSURE_EX(gVkPhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
 
-		PRINT_LOG("Chosen physical device: '{}'", chosenPhysicalDeviceProperties.deviceName);
+		std::string_view deviceName = chosenPhysicalDeviceProperties.deviceName;
+		PRINT_LOG("Chosen physical device: '{}'", deviceName);
 
-		auto requestedFeatureChain                          = GraphicsUtils::FeatureChain();
-		VkPhysicalDeviceFeatures2 requestedVulkan10Features = requestedFeatureChain.f10;
+		GraphicsUtils::FeatureChain requestedFeatureChain = {};
 
 		// Check if requested device features are available
 		{
-			auto availableFeatureChain                          = GraphicsUtils::FeatureChain();
-			VkPhysicalDeviceFeatures2 availableVulkan10Features = availableFeatureChain.f10;
-			vkGetPhysicalDeviceFeatures2(gVkPhysicalDevice, &availableVulkan10Features);
+			GraphicsUtils::FeatureChain availableFeatureChain = {};
+			gVkPhysicalDevice.getFeatures2(&availableFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>());
 
 			PRINT_LOG("====== DEVICE FEATURES ======");
 
 			// Cast to Base structure that only contain type and pnext.
-			const auto* currentAvailable = reinterpret_cast<const VkBaseOutStructure*>(&availableVulkan10Features);
-			const auto* currentRequested = reinterpret_cast<const VkBaseOutStructure*>(&requestedVulkan10Features);
+			const auto* currentAvailable = reinterpret_cast<const vk::BaseOutStructure*>(
+			    &availableFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>()
+			);
+			const auto* currentRequested = reinterpret_cast<const vk::BaseOutStructure*>(
+			    &requestedFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>()
+			);
 
 			bool requestedFeaturesMissing = false;
 			while (currentAvailable != nullptr)
@@ -309,19 +312,19 @@ namespace Graphics
 
 				switch (currentAvailable->sType)
 				{
-					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
+					case vk::StructureType::ePhysicalDeviceFeatures2:
 						vulkanVersionString = "1.0";
 						break;
-					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+					case vk::StructureType::ePhysicalDeviceVulkan11Features:
 						vulkanVersionString = "1.1";
 						break;
-					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+					case vk::StructureType::ePhysicalDeviceVulkan12Features:
 						vulkanVersionString = "1.2";
 						break;
-					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
+					case vk::StructureType::ePhysicalDeviceVulkan13Features:
 						vulkanVersionString = "1.3";
 						break;
-					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES:
+					case vk::StructureType::ePhysicalDeviceVulkan14Features:
 						vulkanVersionString = "1.4";
 						break;
 					default:
@@ -377,23 +380,18 @@ namespace Graphics
 
 		// Search for common queue families available to the physical device
 		{
-			uint32_t queueFamilyCount = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties2(gVkPhysicalDevice, &queueFamilyCount, nullptr);
-
-			std::vector<VkQueueFamilyProperties2> queueFamilyProperties = vkInitStructs(queueFamilyCount);
-			vkGetPhysicalDeviceQueueFamilyProperties2(
-			    gVkPhysicalDevice, &queueFamilyCount, queueFamilyProperties.data()
-			);
+			std::vector<vk::QueueFamilyProperties2> queueFamilyProperties =
+			    gVkPhysicalDevice.getQueueFamilyProperties2();
 
 			for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++)
 			{
-				const VkQueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
+				const vk::QueueFlags queueFlags = queueFamilyProperties[i].queueFamilyProperties.queueFlags;
 
-				const bool hasGraphicsBit = (queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u;
-				const bool hasComputeBit  = (queueFlags & VK_QUEUE_COMPUTE_BIT) != 0u;
-				const bool hasTransferBit = (queueFlags & VK_QUEUE_TRANSFER_BIT) != 0u;
+				const bool hasGraphicsBit = static_cast<bool>(queueFlags & vk::QueueFlagBits::eGraphics);
+				const bool hasComputeBit  = static_cast<bool>(queueFlags & vk::QueueFlagBits::eCompute);
+				const bool hasTransferBit = static_cast<bool>(queueFlags & vk::QueueFlagBits::eTransfer);
 
-				if (hasGraphicsBit && gQueueFamilyIndices.graphics == NULL_UINT32)
+				if (hasGraphicsBit && hasComputeBit && gQueueFamilyIndices.graphics == NULL_UINT32)
 				{
 					if (::GetSDLPresentationSupport(i))
 					{
@@ -422,13 +420,8 @@ namespace Graphics
 
 		// Check if requested device extensions are available
 		{
-			uint32_t extensionCount = 0;
-			ASSERT_VK(vkEnumerateDeviceExtensionProperties(gVkPhysicalDevice, nullptr, &extensionCount, nullptr));
-
-			std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-			ASSERT_VK(vkEnumerateDeviceExtensionProperties(
-			    gVkPhysicalDevice, nullptr, &extensionCount, availableExtensions.data()
-			));
+			const std::vector<vk::ExtensionProperties> availableExtensions =
+			    AssertVk(gVkPhysicalDevice.enumerateDeviceExtensionProperties());
 
 			for (const char* requestedExtensionName : requestedDeviceExtensions)
 			{
@@ -448,21 +441,23 @@ namespace Graphics
 			}
 		}
 
-		const float priority                    = 1.0f;
-		VkDeviceQueueCreateInfo queueCreateInfo = vkInitStruct();
-		queueCreateInfo.queueCount              = 1;
-		queueCreateInfo.queueFamilyIndex        = gQueueFamilyIndices.graphics;
-		queueCreateInfo.pQueuePriorities        = &priority;
+		const float priority                            = 1.0f;
+		const vk::DeviceQueueCreateInfo queueCreateInfo = {
+		    .queueFamilyIndex = gQueueFamilyIndices.graphics, .queueCount = 1, .pQueuePriorities = &priority
+		};
 
 		// Only use device features and device extensions that are requested.
-		VkDeviceCreateInfo deviceCreateInfo      = vkInitStruct();
-		deviceCreateInfo.queueCreateInfoCount    = 1;
-		deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
-		deviceCreateInfo.pNext                   = &requestedVulkan10Features;
-		deviceCreateInfo.enabledExtensionCount   = requestedDeviceExtensions.size();
-		deviceCreateInfo.ppEnabledExtensionNames = requestedDeviceExtensions.data();
+		vk::DeviceCreateInfo deviceCreateInfo = {
+		    .pNext                = &requestedFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>(),
+		    .queueCreateInfoCount = 1,
+		    .pQueueCreateInfos    = &queueCreateInfo
+		};
+		deviceCreateInfo.setPEnabledExtensionNames(requestedDeviceExtensions);
 
-		ASSERT_VK(vkCreateDevice(gVkPhysicalDevice, &deviceCreateInfo, gVkAllocationCallbacks, &gVkDevice));
+		gVkDevice = AssertVk(gVkPhysicalDevice.createDevice(deviceCreateInfo, gAllocationCallbacks));
+
+		// Load device level functions.
+		vk::detail::defaultDispatchLoaderDynamic.init(gVkDevice);
 	}
 
 	void SetupDebugMessenger()
@@ -473,53 +468,54 @@ namespace Graphics
 		}
 
 		// TODO: Could be extended to have options for all flags at setup through some global settings struct.
-		VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo = vkInitStruct();
-		debugMessengerCreateInfo.messageSeverity =
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-		    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
-		debugMessengerCreateInfo.messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-		                                           VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT |
-		                                           VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
-		debugMessengerCreateInfo.pfnUserCallback = ::VkDebugMessagingCallback;
-		debugMessengerCreateInfo.pUserData       = nullptr; // No user data for now.
+		const vk::DebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo = {
+		    .messageSeverity =
+		        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+		        vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo | vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose,
+		    .messageType     = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+		                       vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+		                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
+		    .pfnUserCallback = ::VkDebugMessagingCallback,
+		    .pUserData       = nullptr // No user data for now
+		};
 
-		auto debugUtilsFunc = VK_LOAD_INSTANCE_FUNC(vkCreateDebugUtilsMessengerEXT);
-		ENSURE_EX(debugUtilsFunc != nullptr, "Could not load debug utils EXT.");
-
-		ASSERT_VK(debugUtilsFunc(gVkInstance, &debugMessengerCreateInfo, gVkAllocationCallbacks, &gVkDebugMessenger));
+		gVkDebugMessenger =
+		    AssertVk(gVkInstance.createDebugUtilsMessengerEXT(debugMessengerCreateInfo, gAllocationCallbacks));
 	}
 
 	void SetupSwapchain(const Window& window)
 	{
-		auto* sdlWindow = reinterpret_cast<SDL_Window*>(window.GetWindow());
+		auto* sdlWindow         = reinterpret_cast<SDL_Window*>(window.GetWindow());
+		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
 		ASSERT_SDL(
-		    SDL_Vulkan_CreateSurface(sdlWindow, gVkInstance, gVkAllocationCallbacks, &gVkSurface),
+		    SDL_Vulkan_CreateSurface(
+		        sdlWindow,
+		        gVkInstance,
+		        reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks),
+		        &rawSurface
+		    ),
 		    "Could not create Vulkan surface"
 		);
 
+		gVkSurface = vk::SurfaceKHR(rawSurface);
+
 		// Find what surface formats the physical device supports and the capabilities of the surface
-		VkSurfaceCapabilities2KHR surfaceCapabilities2 = vkInitStruct();
+		vk::SurfaceCapabilities2KHR surfaceCapabilities2 = {};
 		{
-			VkPhysicalDeviceSurfaceInfo2KHR physicalDeviceSurfaceInfo = vkInitStruct();
-			physicalDeviceSurfaceInfo.surface                         = gVkSurface;
+			const vk::PhysicalDeviceSurfaceInfo2KHR physicalDeviceSurfaceInfo = {.surface = gVkSurface};
 
-			uint32_t surfaceCount;
-			ASSERT_VK(vkGetPhysicalDeviceSurfaceFormats2KHR(
-			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCount, nullptr
-			));
-
-			std::vector<VkSurfaceFormat2KHR> surfaceFormats = vkInitStructs(surfaceCount);
-			ASSERT_VK(vkGetPhysicalDeviceSurfaceFormats2KHR(
-			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCount, surfaceFormats.data()
-			));
+			const std::vector<vk::SurfaceFormat2KHR> surfaceFormats =
+			    AssertVk(gVkPhysicalDevice.getSurfaceFormats2KHR(physicalDeviceSurfaceInfo));
 
 			bool foundRequestedSurfaceFormat = false;
-			for (const VkSurfaceFormat2KHR& availableSurfaceFormat : surfaceFormats)
+			for (const vk::SurfaceFormat2KHR& availableSurfaceFormat : surfaceFormats)
 			{
-				// Do the structs contain the exact same data?
-				if (std::memcmp(
-				        &availableSurfaceFormat.surfaceFormat, &gTargetSurfaceFormat, sizeof(VkSurfaceFormatKHR)
-				    ) == 0)
+				const vk::SurfaceFormatKHR surfaceFormat = availableSurfaceFormat.surfaceFormat;
+
+				const bool sameFormat     = surfaceFormat.format == gTargetSurfaceFormat.format;
+				const bool sameColorSpace = surfaceFormat.colorSpace == gTargetSurfaceFormat.colorSpace;
+
+				if (sameFormat && sameColorSpace)
 				{
 					foundRequestedSurfaceFormat = true;
 					break;
@@ -529,36 +525,27 @@ namespace Graphics
 			ENSURE_EX(
 			    foundRequestedSurfaceFormat,
 			    "Physical device does not support requested surface format: {}",
-			    string_VkFormat(gTargetSurfaceFormat.format)
+			    vk::to_string(gTargetSurfaceFormat.format)
 			);
 
-			ASSERT_VK(vkGetPhysicalDeviceSurfaceCapabilities2KHR(
-			    gVkPhysicalDevice, &physicalDeviceSurfaceInfo, &surfaceCapabilities2
-			));
+			surfaceCapabilities2 = AssertVk(gVkPhysicalDevice.getSurfaceCapabilities2KHR(physicalDeviceSurfaceInfo));
 		}
 
 		// Check available presentation modes
 		{
-			uint32_t presentationModeCount;
-			ASSERT_VK(vkGetPhysicalDeviceSurfacePresentModesKHR(
-			    gVkPhysicalDevice, gVkSurface, &presentationModeCount, nullptr
-			));
-
-			std::vector<VkPresentModeKHR> presentationModes(presentationModeCount);
-			ASSERT_VK(vkGetPhysicalDeviceSurfacePresentModesKHR(
-			    gVkPhysicalDevice, gVkSurface, &presentationModeCount, presentationModes.data()
-			));
+			const std::vector<vk::PresentModeKHR> presentationModes =
+			    AssertVk(gVkPhysicalDevice.getSurfacePresentModesKHR(gVkSurface));
 
 			// Standard presentation modes.
-			const std::vector<VkPresentModeKHR> requestedPresentationModes = {
-			    VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR
+			const std::vector<vk::PresentModeKHR> requestedPresentationModes = {
+			    vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eMailbox
 			};
 
-			for (const VkPresentModeKHR requestedPresentMode : requestedPresentationModes)
+			for (const vk::PresentModeKHR requestedPresentMode : requestedPresentationModes)
 			{
 				bool foundPresentMode = false;
 
-				for (const VkPresentModeKHR availablePresentMode : presentationModes)
+				for (const vk::PresentModeKHR availablePresentMode : presentationModes)
 				{
 					if (requestedPresentMode == availablePresentMode)
 					{
@@ -573,7 +560,7 @@ namespace Graphics
 			}
 		}
 
-		VkExtent2D imageExtent = {surfaceCapabilities2.surfaceCapabilities.currentExtent};
+		vk::Extent2D imageExtent = {surfaceCapabilities2.surfaceCapabilities.currentExtent};
 		// If using Wayland then extent is decided from window.
 		if (surfaceCapabilities2.surfaceCapabilities.currentExtent.width == 0xFFFFFFFF)
 		{
@@ -582,31 +569,29 @@ namespace Graphics
 
 		PRINT_DEBUG("Extent: {}, {}", imageExtent.width, imageExtent.height);
 
-		VkSwapchainCreateInfoKHR swapchainCreateInfo = vkInitStruct();
-		swapchainCreateInfo.surface                  = gVkSurface;
-		swapchainCreateInfo.minImageCount            = surfaceCapabilities2.surfaceCapabilities.minImageCount;
-		swapchainCreateInfo.imageFormat              = gTargetSurfaceFormat.format;
-		swapchainCreateInfo.imageColorSpace          = gTargetSurfaceFormat.colorSpace;
-		swapchainCreateInfo.imageExtent              = imageExtent;
-		swapchainCreateInfo.imageArrayLayers         = 1;
-		swapchainCreateInfo.imageUsage               = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		swapchainCreateInfo.presentMode              = VK_PRESENT_MODE_IMMEDIATE_KHR;
-		swapchainCreateInfo.imageSharingMode         = VK_SHARING_MODE_EXCLUSIVE;
-		swapchainCreateInfo.preTransform             = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-		swapchainCreateInfo.compositeAlpha           = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchainCreateInfo.clipped                  = VK_TRUE;
+		const vk::SwapchainCreateInfoKHR swapchainCreateInfo = {
+		    .surface          = gVkSurface,
+		    .minImageCount    = surfaceCapabilities2.surfaceCapabilities.minImageCount,
+		    .imageFormat      = gTargetSurfaceFormat.format,
+		    .imageColorSpace  = gTargetSurfaceFormat.colorSpace,
+		    .imageExtent      = imageExtent,
+		    .imageArrayLayers = 1,
+		    .imageUsage       = vk::ImageUsageFlagBits::eColorAttachment,
+		    .imageSharingMode = vk::SharingMode::eExclusive,
+		    .preTransform     = vk::SurfaceTransformFlagBitsKHR::eIdentity,
+		    .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+		    .presentMode      = vk::PresentModeKHR::eImmediate,
+		    .clipped          = VK_TRUE
+		};
 
-		ASSERT_VK(vkCreateSwapchainKHR(gVkDevice, &swapchainCreateInfo, gVkAllocationCallbacks, &gVkSwapchain));
+		gVkSwapchain = AssertVk(gVkDevice.createSwapchainKHR(swapchainCreateInfo, gAllocationCallbacks));
 
-		uint32_t imageCount;
-		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, nullptr));
-		gSwapchainImages.resize(imageCount);
-		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, gSwapchainImages.data()));
-	}
+		gSwapchainImages = AssertVk(gVkDevice.getSwapchainImagesKHR(gVkSwapchain));
+	} // namespace Graphics
 
 	void Render()
 	{
-		const VkPresentInfoKHR presentInfo = vkInitStruct();
+		const vk::PresentInfoKHR presentInfo = {};
 		UNUSED_VAR(presentInfo);
 	}
 } // namespace Graphics

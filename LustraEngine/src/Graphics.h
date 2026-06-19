@@ -1,7 +1,7 @@
 #pragma once
 
+#include "LustraVulkan.h"
 #include "Window.h"
-#include "vulkan/vulkan.h"
 
 #include <array>
 #include <cstdint>
@@ -15,36 +15,35 @@
 	#define USE_VALIDATION_LAYERS (false)
 #endif
 
-// Useful for checking a valid uint32_t value. The vast majority of the time, this value is never valid.
-#define NULL_UINT32 (UINT32_MAX)
+#define NULL_UINT32 UINT32_MAX
 
 namespace Graphics
 {
-	constexpr uint32_t gEngineVersion       = VK_MAKE_API_VERSION(0, 1, 0, 0);
-	constexpr uint32_t gApplicationVersion  = VK_MAKE_API_VERSION(0, 1, 0, 0);
-	constexpr uint32_t gTargetVulkanVersion = VK_API_VERSION_1_3;
+	constexpr uint32_t gEngineVersion       = vk::makeApiVersion(0, 1, 0, 0);
+	constexpr uint32_t gApplicationVersion  = vk::makeApiVersion(0, 1, 0, 0);
+	constexpr uint32_t gTargetVulkanVersion = vk::ApiVersion14;
 	constexpr bool gUseValidationLayers     = USE_VALIDATION_LAYERS;
 	// Nullptr placeholder that might be used in the future.
-	constexpr VkAllocationCallbacks* gVkAllocationCallbacks = nullptr;
+	constexpr vk::AllocationCallbacks* gAllocationCallbacks = nullptr;
 
-	inline VkInstance gVkInstance                     = VK_NULL_HANDLE;
-	inline VkDebugUtilsMessengerEXT gVkDebugMessenger = VK_NULL_HANDLE;
-	inline VkPhysicalDevice gVkPhysicalDevice         = VK_NULL_HANDLE;
-	inline VkDevice gVkDevice                         = VK_NULL_HANDLE;
-	inline VkSurfaceKHR gVkSurface                    = VK_NULL_HANDLE;
-	inline VkSwapchainKHR gVkSwapchain                = VK_NULL_HANDLE;
+	inline vk::Instance gVkInstance                     = VK_NULL_HANDLE;
+	inline vk::DebugUtilsMessengerEXT gVkDebugMessenger = VK_NULL_HANDLE;
+	inline vk::PhysicalDevice gVkPhysicalDevice         = VK_NULL_HANDLE;
+	inline vk::Device gVkDevice                         = VK_NULL_HANDLE;
+	inline vk::SurfaceKHR gVkSurface                    = VK_NULL_HANDLE;
+	inline vk::SwapchainKHR gVkSwapchain                = VK_NULL_HANDLE;
 
-	constexpr VkSurfaceFormatKHR gTargetSurfaceFormat = {
-	    .format = VK_FORMAT_R8G8B8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+	constexpr vk::SurfaceFormatKHR gTargetSurfaceFormat = {
+	    .format = vk::Format::eR8G8B8A8Srgb, .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear
 	};
 
-	inline std::vector<VkImage> gSwapchainImages = {};
+	inline std::vector<vk::Image> gSwapchainImages = {};
 
 	inline struct QueueFamilyIndices
 	{
-		uint32_t graphics = NULL_UINT32;
-		uint32_t compute  = NULL_UINT32;
-		uint32_t transfer = NULL_UINT32;
+		uint32_t graphics = UINT32_MAX;
+		uint32_t compute  = UINT32_MAX;
+		uint32_t transfer = UINT32_MAX;
 	} gQueueFamilyIndices;
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
@@ -52,7 +51,7 @@ namespace Graphics
 	void TearDownVulkan();
 
 	void SetupInstance(
-	    const VkApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
+	    const vk::ApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
 	);
 	void SetupDevice();
 	void SetupDebugMessenger();

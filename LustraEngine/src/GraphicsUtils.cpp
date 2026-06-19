@@ -171,30 +171,30 @@ namespace GraphicsUtils
 	    "Push Descriptor",
 	};
 
-	FeatureNamesInfo GetFeatureNames(VkStructureType structType)
+	FeatureNamesInfo GetFeatureNames(vk::StructureType structType)
 	{
-		static const std::unordered_map<VkStructureType, FeatureNamesInfo> kFeatureNameTables = {
-		    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+		static const std::unordered_map<vk::StructureType, FeatureNamesInfo> kFeatureNameTables = {
+		    {vk::StructureType::ePhysicalDeviceFeatures2,
 		     {.names       = kVulkan10FeatureNames,
 		      .count       = std::size(kVulkan10FeatureNames),
 		      .firstOffset = offsetof(VkPhysicalDeviceFeatures, robustBufferAccess)}              },
 
-		    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+		    {vk::StructureType::ePhysicalDeviceVulkan11Features,
 		     {.names       = kVulkan11FeatureNames,
 		      .count       = std::size(kVulkan11FeatureNames),
 		      .firstOffset = offsetof(VkPhysicalDeviceVulkan11Features, storageBuffer16BitAccess)}},
 
-		    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+		    {vk::StructureType::ePhysicalDeviceVulkan12Features,
 		     {.names       = kVulkan12FeatureNames,
 		      .count       = std::size(kVulkan12FeatureNames),
 		      .firstOffset = offsetof(VkPhysicalDeviceVulkan12Features, samplerMirrorClampToEdge)}},
 
-		    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+		    {vk::StructureType::ePhysicalDeviceVulkan13Features,
 		     {.names       = kVulkan13FeatureNames,
 		      .count       = std::size(kVulkan13FeatureNames),
 		      .firstOffset = offsetof(VkPhysicalDeviceVulkan13Features, robustImageAccess)}       },
 
-		    {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES,
+		    {vk::StructureType::ePhysicalDeviceVulkan14Features,
 		     {.names       = kVulkan14FeatureNames,
 		      .count       = std::size(kVulkan14FeatureNames),
 		      .firstOffset = offsetof(VkPhysicalDeviceVulkan14Features, globalPriorityQuery)}     },

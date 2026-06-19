@@ -287,38 +287,87 @@ namespace Graphics
 
 		PRINT_LOG("Chosen physical device: '{}'", chosenPhysicalDeviceProperties.deviceName);
 
-		VkPhysicalDeviceFeatures2 requestedDeviceFeatures = vkInitStruct();
+		auto requestedFeatureChain                          = GraphicsUtils::FeatureChain();
+		VkPhysicalDeviceFeatures2 requestedVulkan10Features = requestedFeatureChain.f10;
+
 		// Check if requested device features are available
 		{
-			VkPhysicalDeviceFeatures2 availableDeviceFeatures = vkInitStruct();
-			vkGetPhysicalDeviceFeatures2(gVkPhysicalDevice, &availableDeviceFeatures);
+			auto availableFeatureChain                          = GraphicsUtils::FeatureChain();
+			VkPhysicalDeviceFeatures2 availableVulkan10Features = availableFeatureChain.f10;
+			vkGetPhysicalDeviceFeatures2(gVkPhysicalDevice, &availableVulkan10Features);
 
 			PRINT_LOG("====== DEVICE FEATURES ======");
 
-			const VkBool32* requestedDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&requestedDeviceFeatures.features);
-			const VkBool32* availableDeviceFeaturesArr = reinterpret_cast<VkBool32*>(&availableDeviceFeatures.features);
-			bool requestedFeaturesMissing              = false;
-			for (size_t i = 0; i < sizeof(VkPhysicalDeviceFeatures2::features) / sizeof(VkBool32); i++)
-			{
-				bool featureIsMissing      = false;
-				const char* featureSupport = "NOT USED";
-				if (requestedDeviceFeaturesArr[i] == VK_TRUE)
-				{
-					if (availableDeviceFeaturesArr[i] == VK_FALSE)
-					{
-						featureIsMissing = true;
+			// Cast to Base structure that only contain type and pnext.
+			const auto* currentAvailable = reinterpret_cast<const VkBaseOutStructure*>(&availableVulkan10Features);
+			const auto* currentRequested = reinterpret_cast<const VkBaseOutStructure*>(&requestedVulkan10Features);
 
-						featureSupport = "MISSING";
-					}
-					else
-					{
-						featureSupport = "FOUND";
-					}
+			bool requestedFeaturesMissing = false;
+			while (currentAvailable != nullptr)
+			{
+				std::string_view vulkanVersionString;
+
+				switch (currentAvailable->sType)
+				{
+					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
+						vulkanVersionString = "1.0";
+						break;
+					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+						vulkanVersionString = "1.1";
+						break;
+					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+						vulkanVersionString = "1.2";
+						break;
+					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES:
+						vulkanVersionString = "1.3";
+						break;
+					case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES:
+						vulkanVersionString = "1.4";
+						break;
+					default:
+						CHECK_UNREACHABLE();
 				}
 
-				PRINT_LOG("[{:^10}] {}", featureSupport, VkDeviceFeatureToString(i));
+				PRINT_LOG(" -- Vulkan {} -- ", vulkanVersionString);
 
-				requestedFeaturesMissing |= featureIsMissing;
+				const GraphicsUtils::FeatureNamesInfo featuresInfo =
+				    GraphicsUtils::GetFeatureNames(currentAvailable->sType);
+				const uint16_t firstFeatureFieldOffset = featuresInfo.firstOffset;
+
+				// Because all features are set in stone and are a series of VkBool32's, they can be linearly iterated.
+				const auto* requestedDeviceFeaturesArr = reinterpret_cast<const VkBool32*>(
+				    reinterpret_cast<const char*>(currentRequested) + firstFeatureFieldOffset
+				);
+
+				const auto* availableDeviceFeaturesArr = reinterpret_cast<const VkBool32*>(
+				    reinterpret_cast<const char*>(currentAvailable) + firstFeatureFieldOffset
+				);
+
+				for (uint16_t i = 0; i < featuresInfo.count; i++)
+				{
+					bool featureIsMissing      = false;
+					const char* featureSupport = "NOT USED";
+					if (requestedDeviceFeaturesArr[i] == VK_TRUE)
+					{
+						if (availableDeviceFeaturesArr[i] == VK_FALSE)
+						{
+							featureIsMissing = true;
+
+							featureSupport = "MISSING";
+						}
+						else
+						{
+							featureSupport = "FOUND";
+						}
+					}
+
+					PRINT_LOG("[{:^10}] {}", featureSupport, featuresInfo.names[i]);
+
+					requestedFeaturesMissing |= featureIsMissing;
+				}
+
+				currentAvailable = currentAvailable->pNext;
+				currentRequested = currentRequested->pNext;
 			}
 
 			ENSURE_EX(requestedFeaturesMissing == false, "Device does not support all features that were requested.");
@@ -409,7 +458,7 @@ namespace Graphics
 		VkDeviceCreateInfo deviceCreateInfo      = vkInitStruct();
 		deviceCreateInfo.queueCreateInfoCount    = 1;
 		deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
-		deviceCreateInfo.pNext                   = &requestedDeviceFeatures;
+		deviceCreateInfo.pNext                   = &requestedVulkan10Features;
 		deviceCreateInfo.enabledExtensionCount   = requestedDeviceExtensions.size();
 		deviceCreateInfo.ppEnabledExtensionNames = requestedDeviceExtensions.data();
 
@@ -480,7 +529,7 @@ namespace Graphics
 			ENSURE_EX(
 			    foundRequestedSurfaceFormat,
 			    "Physical device does not support requested surface format: {}",
-			    Graphics::VkFormatToString(gTargetSurfaceFormat.format)
+			    string_VkFormat(gTargetSurfaceFormat.format)
 			);
 
 			ASSERT_VK(vkGetPhysicalDeviceSurfaceCapabilities2KHR(
@@ -553,5 +602,11 @@ namespace Graphics
 		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, nullptr));
 		gSwapchainImages.resize(imageCount);
 		ASSERT_VK(vkGetSwapchainImagesKHR(gVkDevice, gVkSwapchain, &imageCount, gSwapchainImages.data()));
+	}
+
+	void Render()
+	{
+		const VkPresentInfoKHR presentInfo = vkInitStruct();
+		UNUSED_VAR(presentInfo);
 	}
 } // namespace Graphics

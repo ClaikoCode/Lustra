@@ -57,4 +57,6 @@ namespace Graphics
 	void SetupDevice();
 	void SetupDebugMessenger();
 	void SetupSwapchain(const Window& window);
+
+	void Render();
 } // namespace Graphics

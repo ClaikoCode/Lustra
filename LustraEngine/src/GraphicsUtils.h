@@ -5,10 +5,6 @@
 
 #include <vector>
 
-#define ENUM_TO_S(enumValue)                                                                                           \
-	case enumValue:                                                                                                    \
-		return #enumValue;
-
 // Macros for making EXT functions easier.
 // Example: auto vkSetDebugUtilsObjectNameEXT = VK_LOAD_INSTANCE_FUNC(vkSetDebugUtilsObjectNameEXT);
 #define VK_LOAD_INSTANCE_FUNC(func) reinterpret_cast<PFN_##func>(vkGetInstanceProcAddr(Graphics::gVkInstance, #func))
@@ -20,7 +16,7 @@
 		const VkResult err = (vkResult);                                                                               \
 		if (err < 0)                                                                                                   \
 		{                                                                                                              \
-			PRINT_ERROR("Detected Vulkan Error: {}", Graphics::VkResultToString(err));                                 \
+			PRINT_ERROR("Detected Vulkan Error: {}", string_VkResult(err));                                            \
 			LUSTRA_ASSERT(false);                                                                                      \
 		}                                                                                                              \
 	} while (false)
@@ -72,6 +68,10 @@ VK_DEFINE_STYPE(VkDebugUtilsMessengerCreateInfoEXT,		VK_STRUCTURE_TYPE_DEBUG_UTI
 VK_DEFINE_STYPE(VkDebugUtilsObjectNameInfoEXT,         	VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT);
 VK_DEFINE_STYPE(VkDeviceQueueCreateInfo,         		VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO);
 VK_DEFINE_STYPE(VkPhysicalDeviceFeatures2,         		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
+VK_DEFINE_STYPE(VkPhysicalDeviceVulkan11Features,       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES);
+VK_DEFINE_STYPE(VkPhysicalDeviceVulkan12Features,       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
+VK_DEFINE_STYPE(VkPhysicalDeviceVulkan13Features,       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES);
+VK_DEFINE_STYPE(VkPhysicalDeviceVulkan14Features,       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES);
 VK_DEFINE_STYPE(VkQueueFamilyProperties2,         		VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 VK_DEFINE_STYPE(VkPhysicalDeviceSurfaceInfo2KHR,        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR);
 VK_DEFINE_STYPE(VkSurfaceFormat2KHR,        			VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
@@ -129,106 +129,41 @@ inline VkInitVectorProxy vkInitStructs(uint32_t count)
 // 	   Graphics Helper Functions
 // =================================
 
-namespace Graphics
+namespace GraphicsUtils
 {
-	constexpr const char* VkResultToString(VkResult vkResult)
+	struct FeatureNamesInfo
 	{
-		switch (vkResult)
+		const char* const* names;
+		uint16_t count;
+		uint16_t firstOffset;
+	};
+
+	FeatureNamesInfo GetFeatureNames(VkStructureType structType);
+
+	// Creates a contained memory structure for a chain of device feature pointers.
+	struct FeatureChain
+	{
+		VkPhysicalDeviceFeatures2 f10        = vkInitStruct();
+		VkPhysicalDeviceVulkan11Features f11 = vkInitStruct();
+		VkPhysicalDeviceVulkan12Features f12 = vkInitStruct();
+		VkPhysicalDeviceVulkan13Features f13 = vkInitStruct();
+		VkPhysicalDeviceVulkan14Features f14 = vkInitStruct();
+
+		FeatureChain()
 		{
-			ENUM_TO_S(VK_SUCCESS)
-			ENUM_TO_S(VK_NOT_READY)
-			ENUM_TO_S(VK_TIMEOUT)
-			ENUM_TO_S(VK_EVENT_SET)
-			ENUM_TO_S(VK_EVENT_RESET)
-			ENUM_TO_S(VK_INCOMPLETE)
-			ENUM_TO_S(VK_ERROR_OUT_OF_HOST_MEMORY)
-			ENUM_TO_S(VK_ERROR_OUT_OF_DEVICE_MEMORY)
-			ENUM_TO_S(VK_ERROR_INITIALIZATION_FAILED)
-			ENUM_TO_S(VK_ERROR_DEVICE_LOST)
-			ENUM_TO_S(VK_ERROR_MEMORY_MAP_FAILED)
-			ENUM_TO_S(VK_ERROR_LAYER_NOT_PRESENT)
-			ENUM_TO_S(VK_ERROR_EXTENSION_NOT_PRESENT)
-			ENUM_TO_S(VK_ERROR_FEATURE_NOT_PRESENT)
-			ENUM_TO_S(VK_ERROR_INCOMPATIBLE_DRIVER)
-			ENUM_TO_S(VK_ERROR_FORMAT_NOT_SUPPORTED)
-			ENUM_TO_S(VK_ERROR_FRAGMENTED_POOL)
-			ENUM_TO_S(VK_ERROR_UNKNOWN)
-			default:
-				return "UNHANDLED VK RESULT STRING";
+			f10.pNext = &f11;
+			f11.pNext = &f12;
+			f12.pNext = &f13;
+			f13.pNext = &f14;
+			f14.pNext = nullptr;
 		}
-	}
 
-	constexpr const char* VkDeviceFeatureToString(size_t fieldIndex)
-	{
-		constexpr const char* kDeviceFeatureFriendlyNames[] = {
-		    "Robust Buffer Access",
-		    "Full Draw Index UInt32",
-		    "Image Cube Array",
-		    "Independent Blend",
-		    "Geometry Shader",
-		    "Tessellation Shader",
-		    "Sample Rate Shading",
-		    "Dual Source Blend",
-		    "Logic Op",
-		    "Multi Draw Indirect",
-		    "Draw Indirect First Instance",
-		    "Depth Clamp",
-		    "Depth Bias Clamp",
-		    "Fill Mode Non-Solid",
-		    "Depth Bounds",
-		    "Wide Lines",
-		    "Large Points",
-		    "Alpha To One",
-		    "Multi Viewport",
-		    "Sampler Anisotropy",
-		    "Texture Compression ETC2",
-		    "Texture Compression ASTC LDR",
-		    "Texture Compression BC",
-		    "Occlusion Query Precise",
-		    "Pipeline Statistics Query",
-		    "Vertex Pipeline Stores And Atomics",
-		    "Fragment Stores And Atomics",
-		    "Shader Tessellation And Geometry Point Size",
-		    "Shader Image Gather Extended",
-		    "Shader Storage Image Extended Formats",
-		    "Shader Storage Image Multisample",
-		    "Shader Storage Image Read Without Format",
-		    "Shader Storage Image Write Without Format",
-		    "Shader Uniform Buffer Array Dynamic Indexing",
-		    "Shader Sampled Image Array Dynamic Indexing",
-		    "Shader Storage Buffer Array Dynamic Indexing",
-		    "Shader Storage Image Array Dynamic Indexing",
-		    "Shader Clip Distance",
-		    "Shader Cull Distance",
-		    "Shader Float64",
-		    "Shader Int64",
-		    "Shader Int16",
-		    "Shader Resource Residency",
-		    "Shader Resource Min LOD",
-		    "Sparse Binding",
-		    "Sparse Residency Buffer",
-		    "Sparse Residency Image 2D",
-		    "Sparse Residency Image 3D",
-		    "Sparse Residency 2 Samples",
-		    "Sparse Residency 4 Samples",
-		    "Sparse Residency 8 Samples",
-		    "Sparse Residency 16 Samples",
-		    "Sparse Residency Aliased",
-		    "Variable Multisample Rate",
-		    "Inherited Queries",
-		};
+		~FeatureChain() = default;
 
-		static_assert(
-		    sizeof(kDeviceFeatureFriendlyNames) / sizeof(const char*) ==
-		        sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32),
-		    "Device feature friendly name array is out of sync with VkPhysicalDeviceFeatures."
-		);
-
-		return kDeviceFeatureFriendlyNames[fieldIndex];
-	}
-
-	static inline const char* VkFormatToString(VkFormat format)
-	{
-		return string_VkFormat(format);
-	}
-} // namespace Graphics
+		// Self-referential pNext pointers. Copying dont make any sense.
+		FeatureChain(const FeatureChain&)            = delete;
+		FeatureChain(FeatureChain&&)                 = delete;
+		FeatureChain& operator=(const FeatureChain&) = delete;
+		FeatureChain& operator=(FeatureChain&&)      = delete;
+	};
+} // namespace GraphicsUtils

@@ -156,7 +156,7 @@ namespace Graphics
 		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
 		SetupDebugMessenger();
 		SetupDevice();
-		SetupSwapchain(window);
+		SetupSurfaceAndSwapchain(window);
 	}
 
 	void TearDownVulkan()
@@ -391,29 +391,29 @@ namespace Graphics
 				const bool hasComputeBit  = static_cast<bool>(queueFlags & vk::QueueFlagBits::eCompute);
 				const bool hasTransferBit = static_cast<bool>(queueFlags & vk::QueueFlagBits::eTransfer);
 
-				if (hasGraphicsBit && hasComputeBit && gQueueFamilyIndices.graphics == NULL_UINT32)
+				if (hasGraphicsBit && hasComputeBit && graphicsQueue.index == UINT32_MAX)
 				{
 					if (::GetSDLPresentationSupport(i))
 					{
-						gQueueFamilyIndices.graphics = i;
+						graphicsQueue.index = i;
 					}
 				}
 
-				if (hasComputeBit && !hasGraphicsBit && gQueueFamilyIndices.compute == NULL_UINT32)
+				if (hasComputeBit && !hasGraphicsBit && computeQueue.index == UINT32_MAX)
 				{
-					gQueueFamilyIndices.compute = i;
+					computeQueue.index = i;
 				}
 
-				if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && gQueueFamilyIndices.transfer == NULL_UINT32)
+				if (hasTransferBit && !(hasComputeBit || hasGraphicsBit) && transferQueue.index == UINT32_MAX)
 				{
-					gQueueFamilyIndices.transfer = i;
+					transferQueue.index = i;
 				}
 			}
 
 			// Ensure that all queues were found.
-			ENSURE(gQueueFamilyIndices.graphics != NULL_UINT32);
-			ENSURE(gQueueFamilyIndices.compute != NULL_UINT32);
-			ENSURE(gQueueFamilyIndices.transfer != NULL_UINT32);
+			ENSURE(graphicsQueue.index != UINT32_MAX);
+			ENSURE(computeQueue.index != UINT32_MAX);
+			ENSURE(transferQueue.index != UINT32_MAX);
 		}
 
 		std::vector<const char*> const requestedDeviceExtensions = {"VK_KHR_swapchain"};
@@ -443,7 +443,7 @@ namespace Graphics
 
 		const float priority                            = 1.0f;
 		const vk::DeviceQueueCreateInfo queueCreateInfo = {
-		    .queueFamilyIndex = gQueueFamilyIndices.graphics, .queueCount = 1, .pQueuePriorities = &priority
+		    .queueFamilyIndex = graphicsQueue.index, .queueCount = 1, .pQueuePriorities = &priority
 		};
 
 		// Only use device features and device extensions that are requested.
@@ -483,7 +483,7 @@ namespace Graphics
 		    AssertVk(gVkInstance.createDebugUtilsMessengerEXT(debugMessengerCreateInfo, gAllocationCallbacks));
 	}
 
-	void SetupSwapchain(const Window& window)
+	void SetupSurfaceAndSwapchain(const Window& window)
 	{
 		auto* sdlWindow         = reinterpret_cast<SDL_Window*>(window.GetWindow());
 		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;

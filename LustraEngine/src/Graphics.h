@@ -15,8 +15,6 @@
 	#define USE_VALIDATION_LAYERS (false)
 #endif
 
-#define NULL_UINT32 UINT32_MAX
-
 namespace Graphics
 {
 	constexpr uint32_t gEngineVersion       = vk::makeApiVersion(0, 1, 0, 0);
@@ -39,12 +37,18 @@ namespace Graphics
 
 	inline std::vector<vk::Image> gSwapchainImages = {};
 
-	inline struct QueueFamilyIndices
+	struct CommandQueue
 	{
-		uint32_t graphics = UINT32_MAX;
-		uint32_t compute  = UINT32_MAX;
-		uint32_t transfer = UINT32_MAX;
-	} gQueueFamilyIndices;
+		vk::Queue queue = {};
+		uint32_t index  = UINT32_MAX; // Queue index
+	};
+
+	// Graphics, compute, and transfer capabilities.
+	inline CommandQueue graphicsQueue = {};
+	// Compute and transfer capabilities.
+	inline CommandQueue computeQueue = {};
+	// Only transfer capabilities.
+	inline CommandQueue transferQueue = {};
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	void SetupVulkan(std::string_view appName, const Window& window);
@@ -55,7 +59,7 @@ namespace Graphics
 	);
 	void SetupDevice();
 	void SetupDebugMessenger();
-	void SetupSwapchain(const Window& window);
+	void SetupSurfaceAndSwapchain(const Window& window);
 
 	void Render();
 } // namespace Graphics

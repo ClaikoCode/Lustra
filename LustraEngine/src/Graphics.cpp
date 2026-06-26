@@ -9,6 +9,7 @@
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
 
+#include <algorithm>
 #include <vector>
 
 // Single global default dispatcher storage. Should only pertain to a single TU.
@@ -183,21 +184,30 @@ namespace Graphics
 	    const vk::ApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
 	)
 	{
-		// NOTE: This is allowed to contain duplicate strings of the same extension.
-		std::vector<const char*> instanceExtensions = {"VK_KHR_surface", "VK_KHR_get_surface_capabilities2"};
-		for (const char* externalExtension : externalRequestedExtensions)
-		{
-			instanceExtensions.push_back(externalExtension);
-		}
-
-		std::vector<const char*> requestedLayers = {};
+		std::vector<const char*> requestedExtensions = {"VK_KHR_surface", "VK_KHR_get_surface_capabilities2"};
+		std::vector<const char*> requestedLayers     = {};
 
 		if (gUseValidationLayers)
 		{
 			// Exposes an API specific for controlling debug utilities.
-			instanceExtensions.push_back("VK_EXT_debug_utils");
+			requestedExtensions.push_back("VK_EXT_debug_utils");
 			// Enables Vk functions to validate arguments against the spec.
 			requestedLayers.push_back("VK_LAYER_KHRONOS_validation");
+		}
+
+		// NOTE: Vulkan allows this list to contain duplicate strings of the same extension but this is done for
+		// cleanliness and debug output purposes.
+		for (const char* externalExtension : externalRequestedExtensions)
+		{
+			const bool alreadyExistsInRequestedExtensions =
+			    std::ranges::any_of(requestedExtensions, [&](const char* existing) {
+				return std::strcmp(existing, externalExtension) == 0;
+			});
+
+			if (!alreadyExistsInRequestedExtensions)
+			{
+				requestedExtensions.push_back(externalExtension);
+			}
 		}
 
 		// Check that requested validation layers are supported by the Vulkan instance.
@@ -221,6 +231,28 @@ namespace Graphics
 			}
 		}
 
+		// Check the same for requested extensions.
+		{
+			const std::vector<vk::ExtensionProperties> supportedExtensions =
+			    AssertVk(vk::enumerateInstanceExtensionProperties());
+
+			for (const char* requestedExtension : requestedExtensions)
+			{
+				bool requestedExtensionIsSupported = false;
+				for (auto supportedExtension : supportedExtensions)
+				{
+					if (std::string_view(requestedExtension) == std::string_view(supportedExtension.extensionName))
+					{
+						PRINT_DEBUG("Requested extension '{}' available.", requestedExtension);
+						requestedExtensionIsSupported = true;
+						break;
+					}
+				}
+
+				ENSURE_EX(requestedExtensionIsSupported, "Requested extension '{}' was not found.", requestedExtension);
+			}
+		}
+
 		vk::DebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo        = {};
 		std::vector<vk::ValidationFeatureEnableEXT> validationFeatureEnables = {
 		    vk::ValidationFeatureEnableEXT::eBestPractices
@@ -229,7 +261,7 @@ namespace Graphics
 		vk::InstanceCreateInfo instanceCreateInfo{
 		    .pApplicationInfo = &vkApplicationInfo,
 		};
-		instanceCreateInfo.setPEnabledExtensionNames(instanceExtensions);
+		instanceCreateInfo.setPEnabledExtensionNames(requestedExtensions);
 		instanceCreateInfo.setPEnabledLayerNames(requestedLayers);
 
 		// Will create a debug messenger scoped to only instance creation and instance destruction calls.
@@ -287,13 +319,18 @@ namespace Graphics
 				}
 			}
 		}
-
 		ENSURE_EX(gVkPhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
 
 		std::string_view deviceName = chosenPhysicalDeviceProperties.deviceName;
 		PRINT_LOG("Chosen physical device: '{}'", deviceName);
 
 		GraphicsUtils::FeatureChain requestedFeatureChain = {};
+
+		requestedFeatureChain.get<vk::PhysicalDeviceVulkan12Features>().setTimelineSemaphore(VK_TRUE);
+
+		requestedFeatureChain.get<vk::PhysicalDeviceVulkan13Features>()
+		    .setSynchronization2(VK_TRUE)
+		    .setDynamicRendering(VK_TRUE);
 
 		// Check if requested device features are available
 		{

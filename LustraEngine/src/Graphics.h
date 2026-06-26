@@ -2,6 +2,7 @@
 
 #include "LustraVulkan.h"
 #include "Window.h"
+#include "vma/vk_mem_alloc.h"
 
 #include <array>
 #include <cstdint>
@@ -17,8 +18,8 @@
 
 namespace Graphics
 {
-	constexpr uint32_t gEngineVersion       = vk::makeApiVersion(0, 1, 0, 0);
-	constexpr uint32_t gApplicationVersion  = vk::makeApiVersion(0, 1, 0, 0);
+	constexpr uint32_t gEngineVersion       = vk::makeApiVersion(0, 0, 1, 0);
+	constexpr uint32_t gApplicationVersion  = vk::makeApiVersion(0, 0, 1, 0);
 	constexpr uint32_t gTargetVulkanVersion = vk::ApiVersion14;
 	constexpr bool gUseValidationLayers     = USE_VALIDATION_LAYERS;
 	// Nullptr placeholder that might be used in the future.
@@ -50,6 +51,9 @@ namespace Graphics
 	// Only transfer capabilities.
 	inline CommandQueue transferQueue = {};
 
+	// VMA
+	inline VmaAllocator gVmaAllocator = {};
+
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	void SetupVulkan(std::string_view appName, const Window& window);
 	void TearDownVulkan();
@@ -60,6 +64,7 @@ namespace Graphics
 	void SetupDevice();
 	void SetupDebugMessenger();
 	void SetupSurfaceAndSwapchain(const Window& window);
+	void SetupVMA();
 
 	void Render();
 } // namespace Graphics

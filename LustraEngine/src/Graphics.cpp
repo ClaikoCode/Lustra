@@ -1,4 +1,7 @@
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
+#define VMA_STATIC_VULKAN_FUNCTIONS 0  // no static symbols exist
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1 // let VMA fetch the rest itself
+#define VMA_IMPLEMENTATION
 #include "Graphics.h"
 
 #include "GraphicsUtils.h"
@@ -156,6 +159,7 @@ namespace Graphics
 		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
 		SetupDebugMessenger();
 		SetupDevice();
+		SetupVMA();
 		SetupSurfaceAndSwapchain(window);
 	}
 
@@ -170,6 +174,7 @@ namespace Graphics
 
 		gVkDevice.destroySwapchainKHR(gVkSwapchain, gAllocationCallbacks);
 		gVkInstance.destroySurfaceKHR(gVkSurface, gAllocationCallbacks);
+		vmaDestroyAllocator(gVmaAllocator);
 		gVkDevice.destroy(gAllocationCallbacks);
 		gVkInstance.destroy(gAllocationCallbacks);
 	}
@@ -587,7 +592,27 @@ namespace Graphics
 		gVkSwapchain = AssertVk(gVkDevice.createSwapchainKHR(swapchainCreateInfo, gAllocationCallbacks));
 
 		gSwapchainImages = AssertVk(gVkDevice.getSwapchainImagesKHR(gVkSwapchain));
-	} // namespace Graphics
+	}
+
+	void SetupVMA()
+	{
+		const auto& dispatcher = VULKAN_HPP_DEFAULT_DISPATCHER;
+
+		VmaVulkanFunctions vmaFuncInfo    = {};
+		vmaFuncInfo.vkGetInstanceProcAddr = dispatcher.vkGetInstanceProcAddr;
+		vmaFuncInfo.vkGetDeviceProcAddr   = dispatcher.vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo vmaAllocInfo = {};
+		vmaAllocInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+		vmaAllocInfo.physicalDevice         = gVkPhysicalDevice;
+		vmaAllocInfo.device                 = gVkDevice;
+		vmaAllocInfo.pVulkanFunctions       = &vmaFuncInfo;
+		vmaAllocInfo.instance               = gVkInstance;
+		vmaAllocInfo.vulkanApiVersion       = gTargetVulkanVersion;
+		vmaAllocInfo.pAllocationCallbacks   = reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks);
+
+		ASSERT_VK(vmaCreateAllocator(&vmaAllocInfo, &gVmaAllocator));
+	}
 
 	void Render()
 	{

@@ -16,33 +16,49 @@
 	#define USE_VALIDATION_LAYERS (false)
 #endif
 
+// Graphics related constants and struct definitions.
 namespace Graphics
 {
 	constexpr uint32_t gEngineVersion       = vk::makeApiVersion(0, 0, 1, 0);
 	constexpr uint32_t gApplicationVersion  = vk::makeApiVersion(0, 0, 1, 0);
 	constexpr uint32_t gTargetVulkanVersion = vk::ApiVersion14;
 	constexpr bool gUseValidationLayers     = USE_VALIDATION_LAYERS;
-	// Nullptr placeholder that might be used in the future.
-	constexpr vk::AllocationCallbacks* gAllocationCallbacks = nullptr;
-
-	inline vk::Instance gVkInstance                     = VK_NULL_HANDLE;
-	inline vk::DebugUtilsMessengerEXT gVkDebugMessenger = VK_NULL_HANDLE;
-	inline vk::PhysicalDevice gVkPhysicalDevice         = VK_NULL_HANDLE;
-	inline vk::Device gVkDevice                         = VK_NULL_HANDLE;
-	inline vk::SurfaceKHR gVkSurface                    = VK_NULL_HANDLE;
-	inline vk::SwapchainKHR gVkSwapchain                = VK_NULL_HANDLE;
 
 	constexpr vk::SurfaceFormatKHR gTargetSurfaceFormat = {
 	    .format = vk::Format::eR8G8B8A8Srgb, .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear
 	};
-
-	inline std::vector<vk::Image> gSwapchainImages = {};
 
 	struct CommandQueue
 	{
 		vk::Queue queue = {};
 		uint32_t index  = UINT32_MAX; // Queue index
 	};
+
+	struct Swapchain
+	{
+		vk::SwapchainKHR swapchain = VK_NULL_HANDLE;
+		uint32_t width             = UINT32_MAX;
+		uint32_t height            = UINT32_MAX;
+
+		std::vector<vk::Image> images;
+		std::vector<vk::ImageView> views;
+		std::vector<vk::Semaphore> semaphores;
+
+		void Destroy();
+	};
+} // namespace Graphics
+
+namespace Graphics
+{
+	// Nullptr placeholder that might be used in the future.
+	inline vk::Instance gVkInstance                      = VK_NULL_HANDLE;
+	inline vk::DebugUtilsMessengerEXT gVkDebugMessenger  = VK_NULL_HANDLE;
+	inline vk::PhysicalDevice gVkPhysicalDevice          = VK_NULL_HANDLE;
+	inline vk::Device gVkDevice                          = VK_NULL_HANDLE;
+	inline vk::SurfaceKHR gVkSurface                     = VK_NULL_HANDLE;
+	inline vk::AllocationCallbacks* gAllocationCallbacks = nullptr;
+
+	inline Swapchain gSwapchain;
 
 	// Graphics, compute, and transfer capabilities.
 	inline CommandQueue graphicsQueue = {};
@@ -63,8 +79,9 @@ namespace Graphics
 	);
 	void SetupDevice();
 	void SetupDebugMessenger();
-	void SetupSurfaceAndSwapchain(const Window& window);
 	void SetupVMA();
+	void SetupSurface(const Window& window);
+	void CreateSwapchain(const Window& window);
 
 	void Render();
 } // namespace Graphics

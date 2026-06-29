@@ -157,11 +157,13 @@ namespace Graphics
 		auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
 		vk::detail::defaultDispatchLoaderDynamic.init(vkGetInstanceProcAddr);
 
+		// Start initialization of all core systems.
 		SetupInstance(applicationInfo, ::GetSDLInstanceExtensions());
 		SetupDebugMessenger();
 		SetupDevice();
 		SetupVMA();
-		SetupSurfaceAndSwapchain(window);
+		SetupSurface(window);
+		CreateSwapchain(window);
 	}
 
 	void TearDownVulkan()
@@ -173,7 +175,7 @@ namespace Graphics
 			gVkInstance.destroyDebugUtilsMessengerEXT(gVkDebugMessenger, gAllocationCallbacks);
 		}
 
-		gVkDevice.destroySwapchainKHR(gVkSwapchain, gAllocationCallbacks);
+		gSwapchain.Destroy();
 		gVkInstance.destroySurfaceKHR(gVkSurface, gAllocationCallbacks);
 		vmaDestroyAllocator(gVmaAllocator);
 		gVkDevice.destroy(gAllocationCallbacks);
@@ -289,40 +291,45 @@ namespace Graphics
 
 	void SetupDevice()
 	{
-		const std::vector<vk::PhysicalDevice> physicalDevices = AssertVk(gVkInstance.enumeratePhysicalDevices());
-		ENSURE_EX(!physicalDevices.empty(), "Could not find a GPU with Vulkan support.");
-
 		vk::PhysicalDeviceProperties chosenPhysicalDeviceProperties = {};
-		for (const vk::PhysicalDevice physicalDevice : physicalDevices)
+
+		// Find a suitable physical device
 		{
-			vk::PhysicalDeviceFeatures features     = {};
-			vk::PhysicalDeviceProperties properties = {};
+			const std::vector<vk::PhysicalDevice> physicalDevices = AssertVk(gVkInstance.enumeratePhysicalDevices());
+			ENSURE_EX(!physicalDevices.empty(), "Could not find a GPU with Vulkan support.");
 
-			physicalDevice.getFeatures(&features);
-			physicalDevice.getProperties(&properties);
-
-			// Always print list of physical devices available to get an overview of the system.
-			::PrintPhysicalDeviceProperties(properties);
-
-			// Only check for suitable device if none has been found yet.
-			if (gVkPhysicalDevice == VK_NULL_HANDLE)
+			for (const vk::PhysicalDevice physicalDevice : physicalDevices)
 			{
-				// Assume to be true and go through checks to verify.
-				bool isSuitableDevice = true;
+				vk::PhysicalDeviceFeatures features     = {};
+				vk::PhysicalDeviceProperties properties = {};
 
-				isSuitableDevice &= (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu);
+				physicalDevice.getFeatures(&features);
+				physicalDevice.getProperties(&properties);
 
-				if (isSuitableDevice)
+				// Always print list of physical devices available to get an overview of the system.
+				::PrintPhysicalDeviceProperties(properties);
+
+				// Only check for suitable device if none has been found yet.
+				if (gVkPhysicalDevice == VK_NULL_HANDLE)
 				{
-					gVkPhysicalDevice              = physicalDevice;
-					chosenPhysicalDeviceProperties = properties;
+					// Assume to be true and go through checks to verify.
+					bool isSuitableDevice = true;
+
+					isSuitableDevice &= (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu);
+
+					if (isSuitableDevice)
+					{
+						gVkPhysicalDevice              = physicalDevice;
+						chosenPhysicalDeviceProperties = properties;
+					}
 				}
 			}
-		}
-		ENSURE_EX(gVkPhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
 
-		std::string_view deviceName = chosenPhysicalDeviceProperties.deviceName;
-		PRINT_LOG("Chosen physical device: '{}'", deviceName);
+			ENSURE_EX(gVkPhysicalDevice != VK_NULL_HANDLE, "Could not find a suitable GPU.");
+
+			std::string_view deviceName = chosenPhysicalDeviceProperties.deviceName;
+			PRINT_LOG("Chosen physical device: '{}'", deviceName);
+		}
 
 		GraphicsUtils::FeatureChain requestedFeatureChain = {};
 
@@ -525,7 +532,7 @@ namespace Graphics
 		    AssertVk(gVkInstance.createDebugUtilsMessengerEXT(debugMessengerCreateInfo, gAllocationCallbacks));
 	}
 
-	void SetupSurfaceAndSwapchain(const Window& window)
+	void SetupSurface(const Window& window)
 	{
 		auto* sdlWindow         = reinterpret_cast<SDL_Window*>(window.GetWindow());
 		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
@@ -541,7 +548,39 @@ namespace Graphics
 
 		gVkSurface = vk::SurfaceKHR(rawSurface);
 
-		// Find what surface formats the physical device supports and the capabilities of the surface
+		// Check available presentation modes
+		{
+			const std::vector<vk::PresentModeKHR> presentationModes =
+			    AssertVk(gVkPhysicalDevice.getSurfacePresentModesKHR(gVkSurface));
+
+			// Standard presentation modes.
+			const std::vector<vk::PresentModeKHR> requestedPresentationModes = {
+			    vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eMailbox
+			};
+
+			for (const vk::PresentModeKHR requestedPresentMode : requestedPresentationModes)
+			{
+				bool foundPresentMode = false;
+
+				for (const vk::PresentModeKHR availablePresentMode : presentationModes)
+				{
+					if (requestedPresentMode == availablePresentMode)
+					{
+						foundPresentMode = true;
+						break;
+					}
+				}
+
+				ENSURE_EX(
+				    foundPresentMode, "Could not find requested presentation mode: {}", (int)requestedPresentMode
+				);
+			}
+		}
+	}
+
+	void CreateSwapchain(const Window& window)
+	{
+		// Find surface capabilities and see if swapchain can support our desired format.
 		vk::SurfaceCapabilities2KHR surfaceCapabilities2 = {};
 		{
 			const vk::PhysicalDeviceSurfaceInfo2KHR physicalDeviceSurfaceInfo = {.surface = gVkSurface};
@@ -573,62 +612,69 @@ namespace Graphics
 			surfaceCapabilities2 = AssertVk(gVkPhysicalDevice.getSurfaceCapabilities2KHR(physicalDeviceSurfaceInfo));
 		}
 
-		// Check available presentation modes
-		{
-			const std::vector<vk::PresentModeKHR> presentationModes =
-			    AssertVk(gVkPhysicalDevice.getSurfacePresentModesKHR(gVkSurface));
+		const vk::SurfaceCapabilitiesKHR surfaceCapabilities = surfaceCapabilities2.surfaceCapabilities;
 
-			// Standard presentation modes.
-			const std::vector<vk::PresentModeKHR> requestedPresentationModes = {
-			    vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eMailbox
-			};
-
-			for (const vk::PresentModeKHR requestedPresentMode : requestedPresentationModes)
-			{
-				bool foundPresentMode = false;
-
-				for (const vk::PresentModeKHR availablePresentMode : presentationModes)
-				{
-					if (requestedPresentMode == availablePresentMode)
-					{
-						foundPresentMode = true;
-						break;
-					}
-				}
-
-				ENSURE_EX(
-				    foundPresentMode, "Could not find requested presentation mode: {}", (int)requestedPresentMode
-				);
-			}
-		}
-
-		vk::Extent2D imageExtent = {surfaceCapabilities2.surfaceCapabilities.currentExtent};
 		// If using Wayland then extent is decided from window.
 		if (surfaceCapabilities2.surfaceCapabilities.currentExtent.width == 0xFFFFFFFF)
 		{
-			window.GetExtentInPixels(imageExtent.width, imageExtent.height);
+			window.GetExtentInPixels(gSwapchain.width, gSwapchain.height);
+		}
+		else
+		{
+			gSwapchain.width  = surfaceCapabilities.currentExtent.width;
+			gSwapchain.height = surfaceCapabilities.currentExtent.height;
 		}
 
-		PRINT_DEBUG("Extent: {}, {}", imageExtent.width, imageExtent.height);
+		// Makes sure requested image count is guranteed to be between 2 and max supported image count.
+		const uint32_t requestedImageCount =
+		    std::min(surfaceCapabilities.maxImageCount, std::max(2u, surfaceCapabilities.minImageCount));
 
 		const vk::SwapchainCreateInfoKHR swapchainCreateInfo = {
 		    .surface          = gVkSurface,
-		    .minImageCount    = surfaceCapabilities2.surfaceCapabilities.minImageCount,
+		    .minImageCount    = requestedImageCount,
 		    .imageFormat      = gTargetSurfaceFormat.format,
 		    .imageColorSpace  = gTargetSurfaceFormat.colorSpace,
-		    .imageExtent      = imageExtent,
+		    .imageExtent      = {.width = gSwapchain.width, .height = gSwapchain.height},
 		    .imageArrayLayers = 1,
 		    .imageUsage       = vk::ImageUsageFlagBits::eColorAttachment,
 		    .imageSharingMode = vk::SharingMode::eExclusive,
-		    .preTransform     = vk::SurfaceTransformFlagBitsKHR::eIdentity,
+		    .preTransform     = surfaceCapabilities.currentTransform, // Keep the transform of the users display.
 		    .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque,
 		    .presentMode      = vk::PresentModeKHR::eImmediate,
 		    .clipped          = VK_TRUE
 		};
 
-		gVkSwapchain = AssertVk(gVkDevice.createSwapchainKHR(swapchainCreateInfo, gAllocationCallbacks));
+		gSwapchain.swapchain = AssertVk(gVkDevice.createSwapchainKHR(swapchainCreateInfo, gAllocationCallbacks));
 
-		gSwapchainImages = AssertVk(gVkDevice.getSwapchainImagesKHR(gVkSwapchain));
+		gSwapchain.images                = AssertVk(gVkDevice.getSwapchainImagesKHR(gSwapchain.swapchain));
+		const size_t swapChainImageCount = gSwapchain.images.size();
+
+		gSwapchain.views.resize(swapChainImageCount);
+		for (size_t i = 0; i < swapChainImageCount; i++)
+		{
+			const vk::ImageViewCreateInfo imgViewInfo = {
+			    .image            = gSwapchain.images[i],
+			    .viewType         = vk::ImageViewType::e2D,
+			    .format           = gTargetSurfaceFormat.format,
+			    .subresourceRange = {
+			                         .aspectMask     = vk::ImageAspectFlagBits::eColor,
+			                         .baseMipLevel   = 0,
+			                         .levelCount     = 1,
+			                         .baseArrayLayer = 0,
+			                         .layerCount     = 1
+			    }
+			};
+
+			gSwapchain.views[i] = AssertVk(gVkDevice.createImageView(imgViewInfo, gAllocationCallbacks));
+		}
+
+		gSwapchain.semaphores.resize(swapChainImageCount);
+		for (vk::Semaphore& semaphore : gSwapchain.semaphores)
+		{
+			const vk::SemaphoreCreateInfo semaphoreInfo = {};
+
+			semaphore = AssertVk(gVkDevice.createSemaphore(semaphoreInfo, gAllocationCallbacks));
+		}
 	}
 
 	void SetupVMA()
@@ -655,5 +701,34 @@ namespace Graphics
 	{
 		const vk::PresentInfoKHR presentInfo = {};
 		UNUSED_VAR(presentInfo);
+	}
+} // namespace Graphics
+
+// Struct definitions
+namespace Graphics
+{
+	void Swapchain::Destroy()
+	{
+		VALIDATE_EX(gVkDevice != VK_NULL_HANDLE, "Attempted to destroy swapchain without an existing device.");
+
+		for (const vk::ImageView& imageView : views)
+		{
+			gVkDevice.destroyImageView(imageView, gAllocationCallbacks);
+		}
+		views.clear();
+
+		for (const vk::Semaphore& semaphore : semaphores)
+		{
+			gVkDevice.destroySemaphore(semaphore, gAllocationCallbacks);
+		}
+		semaphores.clear();
+
+		if (swapchain)
+		{
+			gVkDevice.destroySwapchainKHR(swapchain, gAllocationCallbacks);
+
+			// Swapchain also destroys images that came with it but clear the vector for cleanliness.
+			images.clear();
+		}
 	}
 } // namespace Graphics

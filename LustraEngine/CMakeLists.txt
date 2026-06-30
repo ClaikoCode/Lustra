@@ -6,7 +6,9 @@ find_package(Vulkan 1.3 REQUIRED COMPONENTS dxc)
 # Add vendored libraries
 add_subdirectory(vendor)
 
-add_executable(LustraEngine "src/main.cpp" "src/Window.h" "src/Window.cpp" "src/App.h" "src/App.cpp" "src/Graphics.h" "src/Graphics.cpp" "src/SDLAssert.h" "src/GraphicsUtils.h" "src/GraphicsUtils.cpp")
+file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+
+add_executable(LustraEngine ${ENGINE_SOURCES})
 
 target_link_libraries(LustraEngine PRIVATE 
     LustraLib

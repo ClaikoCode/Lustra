@@ -8,12 +8,30 @@
 #include "LustraLib/LustraLib.h"
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
+#include "Texture.h"
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 // Single global default dispatcher storage. Should only pertain to a single TU.
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
+// Renderer resources
+// TODO: Move to separate file later
+
+struct FrameResources
+{
+};
+
+struct Renderer
+{
+	GPUMemoryMan::DepthTexture sceneDepth;
+
+	std::array<FrameResources, Graphics::gMaxFramesInFlight> framesInFlight = {};
+};
+
+static Renderer gRenderer = {};
 
 namespace
 {
@@ -136,6 +154,7 @@ namespace
 	{
 		return SDL_Vulkan_GetPresentationSupport(Graphics::gVkInstance, Graphics::gVkPhysicalDevice, queueFamilyIndex);
 	}
+
 } // namespace
 
 namespace Graphics
@@ -164,6 +183,7 @@ namespace Graphics
 		SetupVMA();
 		SetupSurface(window);
 		CreateSwapchain(window);
+		SetupRenderer();
 	}
 
 	void TearDownVulkan()
@@ -695,6 +715,21 @@ namespace Graphics
 		vmaAllocInfo.pAllocationCallbacks   = reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks);
 
 		ASSERT_VK(vmaCreateAllocator(&vmaAllocInfo, &gVmaAllocator));
+	}
+
+	void SetupRenderer()
+	{
+		// Depth creation
+		{
+			GPUMemoryMan::CreateDepthTexture(
+			    gRenderer.sceneDepth, gSwapchain.width, gSwapchain.height, vk::Format::eD32Sfloat
+			);
+		}
+	}
+
+	void DestroyRenderer()
+	{
+		GPUMemoryMan::DestroyDepthTexture(gRenderer.sceneDepth);
 	}
 
 	void Render()

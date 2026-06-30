@@ -28,6 +28,10 @@ namespace Graphics
 	    .format = vk::Format::eR8G8B8A8Srgb, .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear
 	};
 
+	constexpr vk::Format gTargetDepthFormat = vk::Format::eD32Sfloat;
+
+	constexpr uint32_t gMaxFramesInFlight = 2u;
+
 	struct CommandQueue
 	{
 		vk::Queue queue = {};
@@ -46,6 +50,7 @@ namespace Graphics
 
 		void Destroy();
 	};
+
 } // namespace Graphics
 
 namespace Graphics
@@ -82,6 +87,9 @@ namespace Graphics
 	void SetupVMA();
 	void SetupSurface(const Window& window);
 	void CreateSwapchain(const Window& window);
+
+	void SetupRenderer();
+	void DestroyRenderer();
 
 	void Render();
 } // namespace Graphics

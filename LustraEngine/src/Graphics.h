@@ -50,7 +50,6 @@ namespace Graphics
 
 		void Destroy();
 	};
-
 } // namespace Graphics
 
 namespace Graphics

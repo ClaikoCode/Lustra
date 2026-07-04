@@ -8,17 +8,80 @@
 #include "LustraLib/LustraLib.h"
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
+#include "ShaderCompilerDXC.h"
 #include "Texture.h"
 
 #include <algorithm>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 // Single global default dispatcher storage. Should only pertain to a single TU.
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
-// Renderer resources
-// TODO: Move to separate file later
+// Homeless resources
+// TODO: Move to separate files later
+
+struct ShaderPackage
+{
+	ShaderCompilationInfo compInfo;
+	ShaderArtifact artifact;
+
+	vk::ShaderModule module;
+
+	ShaderCompiler compiler;
+};
+
+struct ShaderCompilationManager
+{
+	enum ShaderID : uint8_t
+	{
+		ShaderIDUnknown = 0ull,
+		ShaderIDVSTest,
+		ShaderIDFSTest,
+	};
+
+	std::unordered_map<ShaderID, ShaderPackage> shaderPackages;
+
+	void RegisterShader(ShaderID id, std::string_view shaderPath, ShaderType shaderType, ShaderCompiler compiler)
+	{
+		auto& shaderPackage = shaderPackages[id];
+
+		shaderPackage.compiler            = compiler;
+		shaderPackage.compInfo.shaderPath = shaderPath;
+		shaderPackage.compInfo.shaderType = shaderType;
+	}
+
+	void CompileHLSL(ShaderID id)
+	{
+		auto& shaderPackage = shaderPackages[id];
+
+		const std::vector<std::string> includeDirs = {};
+		ENSURE(ShaderCompilation::DXC::CompileShader(shaderPackage.compInfo, includeDirs, shaderPackage.artifact));
+	}
+
+	void CreateShaderModule(ShaderID id)
+	{
+		ShaderPackage& shaderPackage = shaderPackages.at(id);
+
+		ENSURE(!shaderPackage.artifact.spirvData.empty());
+
+		// Destroy previous module if it already exists.
+		// This means that the caller has to guarantee that the shader module is not in use before re-creation.
+		if (shaderPackage.module != nullptr)
+		{
+			Graphics::gVkDevice.destroyShaderModule(shaderPackage.module, Graphics::gAllocationCallbacks);
+		}
+
+		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
+		    .codeSize = shaderPackage.artifact.spirvData.size(),
+		    .pCode    = reinterpret_cast<const uint32_t*>(shaderPackage.artifact.spirvData.data()),
+		};
+
+		shaderPackage.module =
+		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
+	}
+};
 
 struct FrameResources
 {
@@ -31,7 +94,8 @@ struct Renderer
 	std::array<FrameResources, Graphics::gMaxFramesInFlight> framesInFlight = {};
 };
 
-static Renderer gRenderer = {};
+static Renderer gRenderer                          = {};
+static ShaderCompilationManager gShaderCompManager = {};
 
 namespace
 {
@@ -719,11 +783,39 @@ namespace Graphics
 
 	void SetupRenderer()
 	{
+		ShaderCompilation::DXC::Init();
+
 		// Depth creation
 		{
 			GPUMemoryMan::CreateDepthTexture(
 			    gRenderer.sceneDepth, gSwapchain.width, gSwapchain.height, vk::Format::eD32Sfloat
 			);
+		}
+
+		// Shader objects
+		{
+			static const std::string sShaderPath     = "/home/jonathand/Projects/Lustra/LustraEngine/src/shaders/";
+			static const std::string sHLSLShaderPath = sShaderPath + "hlsl/";
+
+			gShaderCompManager.RegisterShader(
+			    ShaderCompilationManager::ShaderIDVSTest,
+			    sHLSLShaderPath + "VSTest.hlsl",
+			    ShaderTypeVS,
+			    ShaderCompilerDXC
+			);
+
+			gShaderCompManager.RegisterShader(
+			    ShaderCompilationManager::ShaderIDFSTest,
+			    sHLSLShaderPath + "FSTest.hlsl",
+			    ShaderTypeFS,
+			    ShaderCompilerDXC
+			);
+
+			for (auto& [id, _] : gShaderCompManager.shaderPackages)
+			{
+				gShaderCompManager.CompileHLSL(id);
+				gShaderCompManager.CreateShaderModule(id);
+			}
 		}
 	}
 

@@ -15,6 +15,7 @@ AlwaysBreakTemplateDeclarations: Yes
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
 
 LambdaBodyIndentation: OuterScope
 IndentCaseLabels: true
@@ -27,3 +28,4 @@ AlignOperands: Align
 
 SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
+

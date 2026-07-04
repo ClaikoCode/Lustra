@@ -9,8 +9,8 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
   -modernize-use-nodiscard,
-  -modernize-pass-by-value,
   -modernize-return-braced-init-list, # Explicit constructor returns are more clear IMO
+  -modernize-use-concise-preprocessor-directives # defined() is not hard to write
 
   readability-*,
   -readability-magic-numbers,

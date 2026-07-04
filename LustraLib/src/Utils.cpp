@@ -24,19 +24,19 @@ namespace Utils
 			return "";
 		}
 
-		char narrowString[sMaxSize]   = {};
-		size_t convertedNumberOfChars = 0; // Does not include null terminator.
-		
-		size_t convertResult = std::wcstombs(narrowString, wideString, narrowSize);
-		if (convertResult == static_cast<size_t>(-1))
+		char narrowString[sMaxSize] = {};
+
+		// Excluding null terminator.
+		const size_t numberOfCharsWritten =
+		    std::wcstombs(narrowString, wideString, narrowSize); // NOLINT(concurrency-mt-unsafe)
+
+		if (numberOfCharsWritten == SIZE_MAX)
 		{
 			PRINT_ERROR("Could not convert wide string into narrow string. Returning empty string.");
 			return "";
 		}
 
-		// Ignore null terminator as the string constructor will copy it as if it is a unique character part of the
-		// string itself.
-		return std::string(narrowString, convertedNumberOfChars - 1);
+		return std::string(narrowString, numberOfCharsWritten);
 	}
 
 	std::wstring ConvertStringNarrowToWide(const char* narrowString)
@@ -51,16 +51,15 @@ namespace Utils
 
 		const size_t wideStringMaxCharacters        = sMaxSize / sizeof(wchar_t);
 		wchar_t wideString[wideStringMaxCharacters] = {};
-		size_t convertedNumberOfChars               = 0;
-		size_t convertResult = std::mbstowcs(wideString, narrowString, wideStringMaxCharacters); 
-		if (convertResult == static_cast<size_t>(-1))
+
+		// Excluding null terminator.
+		const size_t numberOfCharsWritten = std::mbstowcs(wideString, narrowString, wideStringMaxCharacters);
+		if (numberOfCharsWritten == SIZE_MAX)
 		{
 			PRINT_ERROR("Could not convert narrow string into wide string. Returning empty string.");
 			return L"";
 		}
 
-		// Ignore null terminator as the string constructor will copy it as if it is a unique character part of the
-		// string itself.
-		return std::wstring(wideString, convertedNumberOfChars - 1);
+		return std::wstring(wideString, numberOfCharsWritten);
 	}
 } // namespace Utils

@@ -1,8 +1,10 @@
 #include "App.h"
 
+#include "AssetManager.h"
 #include "Graphics.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
+#include "Renderer.h"
 #include "SDL3/SDL.h"
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
@@ -32,6 +34,8 @@ App::~App()
 bool App::RunApp()
 {
 	Graphics::SetupVulkan(m_name, m_window);
+	AssetManager::Setup();
+	Renderer::Setup();
 
 	SDL_Event event = {};
 	bool shouldQuit = false;
@@ -53,8 +57,14 @@ bool App::RunApp()
 				shouldQuit = true;
 			}
 		}
+
+		Renderer::Render();
 	}
 
+	Graphics::WaitForDevice();
+
+	Renderer::Destroy();
+	AssetManager::Destroy();
 	Graphics::TearDownVulkan();
 
 	// False means a quit without errors

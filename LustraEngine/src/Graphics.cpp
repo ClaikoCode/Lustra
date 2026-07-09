@@ -22,81 +22,6 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 // Homeless resources
 // TODO: Move to separate files later
 
-struct ShaderPackage
-{
-	ShaderCompilationInfo compInfo;
-	ShaderArtifact artifact;
-
-	vk::ShaderModule module;
-
-	ShaderCompiler compiler;
-};
-
-struct ShaderCompilationManager
-{
-	enum ShaderID : uint8_t
-	{
-		ShaderIDUnknown = 0ull,
-		ShaderIDVSTest,
-		ShaderIDFSTest,
-	};
-
-	std::unordered_map<ShaderID, ShaderPackage> shaderPackages;
-
-	void RegisterShader(ShaderID id, std::string_view shaderPath, ShaderType shaderType, ShaderCompiler compiler)
-	{
-		auto& shaderPackage = shaderPackages[id];
-
-		shaderPackage.compiler            = compiler;
-		shaderPackage.compInfo.shaderPath = shaderPath;
-		shaderPackage.compInfo.shaderType = shaderType;
-	}
-
-	void CompileHLSL(ShaderID id)
-	{
-		auto& shaderPackage = shaderPackages[id];
-
-		const std::vector<std::string> includeDirs = {};
-		ENSURE(ShaderCompilation::DXC::CompileShader(shaderPackage.compInfo, includeDirs, shaderPackage.artifact));
-	}
-
-	void CreateShaderModule(ShaderID id)
-	{
-		ShaderPackage& shaderPackage = shaderPackages.at(id);
-
-		ENSURE(!shaderPackage.artifact.spirvData.empty());
-
-		// Destroy previous module if it already exists.
-		// This means that the caller has to guarantee that the shader module is not in use before re-creation.
-		if (shaderPackage.module != nullptr)
-		{
-			Graphics::gVkDevice.destroyShaderModule(shaderPackage.module, Graphics::gAllocationCallbacks);
-		}
-
-		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
-		    .codeSize = shaderPackage.artifact.spirvData.size(),
-		    .pCode    = reinterpret_cast<const uint32_t*>(shaderPackage.artifact.spirvData.data()),
-		};
-
-		shaderPackage.module =
-		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
-	}
-};
-
-struct FrameResources
-{
-};
-
-struct Renderer
-{
-	GPUMemoryMan::DepthTexture sceneDepth;
-
-	std::array<FrameResources, Graphics::gMaxFramesInFlight> framesInFlight = {};
-};
-
-static Renderer gRenderer                          = {};
-static ShaderCompilationManager gShaderCompManager = {};
-
 namespace
 {
 	// Should return bool that tells if the callback should be aborted. However, returning true is usually only for
@@ -235,6 +160,9 @@ namespace Graphics
 		    .apiVersion         = gTargetVulkanVersion,
 		};
 
+		// Store a pointer to the window
+		gWindowPtr = &window;
+
 		// Setup dynamic loader.
 		const vk::detail::DynamicLoader dl;
 		auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -247,14 +175,13 @@ namespace Graphics
 		SetupVMA();
 		SetupSurface(window);
 		CreateSwapchain(window);
-		SetupRenderer();
 	}
 
 	void TearDownVulkan()
 	{
 		PRINT_DEBUG("Tearing down Vulkan.");
 
-		if (gUseValidationLayers)
+		if constexpr (gUseValidationLayers)
 		{
 			gVkInstance.destroyDebugUtilsMessengerEXT(gVkDebugMessenger, gAllocationCallbacks);
 		}
@@ -273,7 +200,7 @@ namespace Graphics
 		std::vector<const char*> requestedExtensions = {"VK_KHR_surface", "VK_KHR_get_surface_capabilities2"};
 		std::vector<const char*> requestedLayers     = {};
 
-		if (gUseValidationLayers)
+		if constexpr (gUseValidationLayers)
 		{
 			// Exposes an API specific for controlling debug utilities.
 			requestedExtensions.push_back("VK_EXT_debug_utils");
@@ -286,9 +213,7 @@ namespace Graphics
 		for (const char* externalExtension : externalRequestedExtensions)
 		{
 			const bool alreadyExistsInRequestedExtensions =
-			    std::ranges::any_of(requestedExtensions, [&](const char* existing) {
-				return std::strcmp(existing, externalExtension) == 0;
-			});
+			    std::ranges::contains(requestedExtensions, std::string_view(externalExtension));
 
 			if (!alreadyExistsInRequestedExtensions)
 			{
@@ -352,7 +277,7 @@ namespace Graphics
 
 		// Will create a debug messenger scoped to only instance creation and instance destruction calls.
 		vk::ValidationFeaturesEXT validationFeatures = {};
-		if (gUseValidationLayers)
+		if constexpr (gUseValidationLayers)
 		{
 			// Debug messenger create info
 			debugMessengerCreateInfo.messageSeverity =
@@ -431,19 +356,19 @@ namespace Graphics
 			PRINT_LOG("====== DEVICE FEATURES ======");
 
 			// Cast to Base structure that only contain type and pnext.
-			const auto* currentAvailable = reinterpret_cast<const vk::BaseOutStructure*>(
+			const auto* currentAvailableFeature = reinterpret_cast<const vk::BaseOutStructure*>(
 			    &availableFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>()
 			);
-			const auto* currentRequested = reinterpret_cast<const vk::BaseOutStructure*>(
+			const auto* currentRequestedFeature = reinterpret_cast<const vk::BaseOutStructure*>(
 			    &requestedFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>()
 			);
 
 			bool requestedFeaturesMissing = false;
-			while (currentAvailable != nullptr)
+			// Loop through linked list.
+			while (currentAvailableFeature != nullptr)
 			{
 				std::string_view vulkanVersionString;
-
-				switch (currentAvailable->sType)
+				switch (currentAvailableFeature->sType)
 				{
 					case vk::StructureType::ePhysicalDeviceFeatures2:
 						vulkanVersionString = "1.0";
@@ -467,16 +392,16 @@ namespace Graphics
 				PRINT_LOG(" -- Vulkan {} -- ", vulkanVersionString);
 
 				const GraphicsUtils::FeatureNamesInfo featuresInfo =
-				    GraphicsUtils::GetFeatureNames(currentAvailable->sType);
+				    GraphicsUtils::GetFeatureNames(currentAvailableFeature->sType);
 				const uint16_t firstFeatureFieldOffset = featuresInfo.firstOffset;
 
 				// Because all features are set in stone and are a series of VkBool32's, they can be linearly iterated.
 				const auto* requestedDeviceFeaturesArr = reinterpret_cast<const VkBool32*>(
-				    reinterpret_cast<const char*>(currentRequested) + firstFeatureFieldOffset
+				    reinterpret_cast<const char*>(currentRequestedFeature) + firstFeatureFieldOffset
 				);
 
 				const auto* availableDeviceFeaturesArr = reinterpret_cast<const VkBool32*>(
-				    reinterpret_cast<const char*>(currentAvailable) + firstFeatureFieldOffset
+				    reinterpret_cast<const char*>(currentAvailableFeature) + firstFeatureFieldOffset
 				);
 
 				for (uint16_t i = 0; i < featuresInfo.count; i++)
@@ -502,8 +427,8 @@ namespace Graphics
 					requestedFeaturesMissing |= featureIsMissing;
 				}
 
-				currentAvailable = currentAvailable->pNext;
-				currentRequested = currentRequested->pNext;
+				currentAvailableFeature = currentAvailableFeature->pNext;
+				currentRequestedFeature = currentRequestedFeature->pNext;
 			}
 
 			ENSURE_EX(requestedFeaturesMissing == false, "Device does not support all features that were requested.");
@@ -559,7 +484,7 @@ namespace Graphics
 			for (const char* requestedExtensionName : requestedDeviceExtensions)
 			{
 				bool requestedExtensionFound = false;
-				for (const VkExtensionProperties& availableExtension : availableExtensions)
+				for (const vk::ExtensionProperties& availableExtension : availableExtensions)
 				{
 					if (std::string_view(availableExtension.extensionName) == std::string_view(requestedExtensionName))
 					{
@@ -574,28 +499,40 @@ namespace Graphics
 			}
 		}
 
-		const float priority                            = 1.0f;
-		const vk::DeviceQueueCreateInfo queueCreateInfo = {
-		    .queueFamilyIndex = graphicsQueue.index, .queueCount = 1, .pQueuePriorities = &priority
+		const float priority                                           = 1.0f;
+		const std::array<vk::DeviceQueueCreateInfo, 3> queueCreateInfo = {
+		    vk::DeviceQueueCreateInfo{
+		        .queueFamilyIndex = graphicsQueue.index, .queueCount = 1, .pQueuePriorities = &priority
+		    },
+		    vk::DeviceQueueCreateInfo{
+		        .queueFamilyIndex = computeQueue.index, .queueCount = 1, .pQueuePriorities = &priority
+		    },
+		    vk::DeviceQueueCreateInfo{
+		        .queueFamilyIndex = transferQueue.index, .queueCount = 1, .pQueuePriorities = &priority
+		    }
 		};
 
 		// Only use device features and device extensions that are requested.
 		vk::DeviceCreateInfo deviceCreateInfo = {
-		    .pNext                = &requestedFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>(),
-		    .queueCreateInfoCount = 1,
-		    .pQueueCreateInfos    = &queueCreateInfo
+		    .pNext = &requestedFeatureChain.get<vk::PhysicalDeviceFeatures2KHR>(),
 		};
+		deviceCreateInfo.setQueueCreateInfos(queueCreateInfo);
 		deviceCreateInfo.setPEnabledExtensionNames(requestedDeviceExtensions);
 
 		gVkDevice = AssertVk(gVkPhysicalDevice.createDevice(deviceCreateInfo, gAllocationCallbacks));
 
 		// Load device level functions.
 		vk::detail::defaultDispatchLoaderDynamic.init(gVkDevice);
+
+		// Get the queues after device has been created.
+		graphicsQueue.queue = gVkDevice.getQueue(graphicsQueue.index, 0);
+		computeQueue.queue  = gVkDevice.getQueue(computeQueue.index, 0);
+		transferQueue.queue = gVkDevice.getQueue(transferQueue.index, 0);
 	}
 
 	void SetupDebugMessenger()
 	{
-		if (!gUseValidationLayers)
+		if constexpr (!gUseValidationLayers)
 		{
 			return;
 		}
@@ -618,7 +555,7 @@ namespace Graphics
 
 	void SetupSurface(const Window& window)
 	{
-		auto* sdlWindow         = reinterpret_cast<SDL_Window*>(window.GetWindow());
+		auto* sdlWindow         = static_cast<SDL_Window*>(window.GetWindow());
 		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
 		ASSERT_SDL(
 		    SDL_Vulkan_CreateSurface(
@@ -656,7 +593,9 @@ namespace Graphics
 				}
 
 				ENSURE_EX(
-				    foundPresentMode, "Could not find requested presentation mode: {}", (int)requestedPresentMode
+				    foundPresentMode,
+				    "Could not find requested presentation mode: {}",
+				    vk::to_string(requestedPresentMode)
 				);
 			}
 		}
@@ -741,11 +680,11 @@ namespace Graphics
 			    .viewType         = vk::ImageViewType::e2D,
 			    .format           = gTargetSurfaceFormat.format,
 			    .subresourceRange = {
-			                         .aspectMask     = vk::ImageAspectFlagBits::eColor,
-			                         .baseMipLevel   = 0,
-			                         .levelCount     = 1,
-			                         .baseArrayLayer = 0,
-			                         .layerCount     = 1
+			        .aspectMask     = vk::ImageAspectFlagBits::eColor,
+			        .baseMipLevel   = 0,
+			        .levelCount     = 1,
+			        .baseArrayLayer = 0,
+			        .layerCount     = 1
 			    }
 			};
 
@@ -778,56 +717,12 @@ namespace Graphics
 		vmaAllocInfo.vulkanApiVersion       = gTargetVulkanVersion;
 		vmaAllocInfo.pAllocationCallbacks   = reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks);
 
-		ASSERT_VK(vmaCreateAllocator(&vmaAllocInfo, &gVmaAllocator));
+		AssertVk(static_cast<vk::Result>(vmaCreateAllocator(&vmaAllocInfo, &gVmaAllocator)));
 	}
 
-	void SetupRenderer()
+	void WaitForDevice()
 	{
-		ShaderCompilation::DXC::Init();
-
-		// Depth creation
-		{
-			GPUMemoryMan::CreateDepthTexture(
-			    gRenderer.sceneDepth, gSwapchain.width, gSwapchain.height, vk::Format::eD32Sfloat
-			);
-		}
-
-		// Shader objects
-		{
-			static const std::string sShaderPath     = "/home/jonathand/Projects/Lustra/LustraEngine/src/shaders/";
-			static const std::string sHLSLShaderPath = sShaderPath + "hlsl/";
-
-			gShaderCompManager.RegisterShader(
-			    ShaderCompilationManager::ShaderIDVSTest,
-			    sHLSLShaderPath + "VSTest.hlsl",
-			    ShaderTypeVS,
-			    ShaderCompilerDXC
-			);
-
-			gShaderCompManager.RegisterShader(
-			    ShaderCompilationManager::ShaderIDFSTest,
-			    sHLSLShaderPath + "FSTest.hlsl",
-			    ShaderTypeFS,
-			    ShaderCompilerDXC
-			);
-
-			for (auto& [id, _] : gShaderCompManager.shaderPackages)
-			{
-				gShaderCompManager.CompileHLSL(id);
-				gShaderCompManager.CreateShaderModule(id);
-			}
-		}
-	}
-
-	void DestroyRenderer()
-	{
-		GPUMemoryMan::DestroyDepthTexture(gRenderer.sceneDepth);
-	}
-
-	void Render()
-	{
-		const vk::PresentInfoKHR presentInfo = {};
-		UNUSED_VAR(presentInfo);
+		AssertVk(gVkDevice.waitIdle());
 	}
 } // namespace Graphics
 

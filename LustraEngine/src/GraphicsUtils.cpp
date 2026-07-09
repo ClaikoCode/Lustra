@@ -177,7 +177,7 @@ namespace GraphicsUtils
 		    {vk::StructureType::ePhysicalDeviceFeatures2,
 		     {.names       = kVulkan10FeatureNames,
 		      .count       = std::size(kVulkan10FeatureNames),
-		      .firstOffset = offsetof(VkPhysicalDeviceFeatures, robustBufferAccess)}              },
+		      .firstOffset = offsetof(VkPhysicalDeviceFeatures, robustBufferAccess)}},
 
 		    {vk::StructureType::ePhysicalDeviceVulkan11Features,
 		     {.names       = kVulkan11FeatureNames,
@@ -192,12 +192,12 @@ namespace GraphicsUtils
 		    {vk::StructureType::ePhysicalDeviceVulkan13Features,
 		     {.names       = kVulkan13FeatureNames,
 		      .count       = std::size(kVulkan13FeatureNames),
-		      .firstOffset = offsetof(VkPhysicalDeviceVulkan13Features, robustImageAccess)}       },
+		      .firstOffset = offsetof(VkPhysicalDeviceVulkan13Features, robustImageAccess)}},
 
 		    {vk::StructureType::ePhysicalDeviceVulkan14Features,
 		     {.names       = kVulkan14FeatureNames,
 		      .count       = std::size(kVulkan14FeatureNames),
-		      .firstOffset = offsetof(VkPhysicalDeviceVulkan14Features, globalPriorityQuery)}     },
+		      .firstOffset = offsetof(VkPhysicalDeviceVulkan14Features, globalPriorityQuery)}},
 		};
 
 		ENSURE_EX(
@@ -208,3 +208,20 @@ namespace GraphicsUtils
 	}
 
 } // namespace GraphicsUtils
+
+void _AssertVkBase(vk::Result result, const std::source_location& loc)
+{
+	// Negative VkResult = real error. Zero/positive = success or info code.
+	if (static_cast<std::int32_t>(result) < 0)
+	{
+		LustraLib::Print(
+		    LustraLib::OutputLevelError,
+		    loc.file_name(),
+		    loc.function_name(),
+		    loc.line(),
+		    "Detected Vulkan Error: {}",
+		    vk::to_string(result)
+		);
+		LUSTRA_ASSERT(false);
+	}
+}

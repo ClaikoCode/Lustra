@@ -7,37 +7,51 @@
 #include <source_location>
 #include <vector>
 
-// Use the template function below for all vulkan.hpp cases
-// This should only be used with functions that return vk results like the C API (vma for example).
-#define ASSERT_VK(vkResult)                                                                                            \
-	do                                                                                                                 \
-	{                                                                                                                  \
-		const VkResult err = (vkResult);                                                                               \
-		if (err < 0)                                                                                                   \
-		{                                                                                                              \
-			PRINT_ERROR("Detected Vulkan Error: {}", vk::to_string(static_cast<vk::Result>(err)));                     \
-			LUSTRA_ASSERT(false);                                                                                      \
-		}                                                                                                              \
-	} while (false)
+namespace detail
+{
+	// Dont use this directly.
+	inline void AssertVkBase(vk::Result result, const std::source_location& loc)
+	{
+		// Negative VkResult = real error. Zero/positive = success or info code.
+		if (static_cast<std::int32_t>(result) < 0)
+		{
+			LustraLib::Print(
+			    LustraLib::OutputLevelError,
+			    loc.file_name(),
+			    loc.function_name(),
+			    loc.line(),
+			    "Detected Vulkan Error: {}",
+			    vk::to_string(result)
+			);
+
+			LUSTRA_ASSERT(false);
+		}
+		else
+		{
+			if (result != vk::Result::eSuccess)
+			{
+				PRINT_DEBUG(
+				    "Vk result '{}' is neither an error or success. Make sure to handle it corectly.",
+				    vk::to_string(result)
+				);
+			}
+		}
+	}
+} // namespace detail
 
 template <typename T>
-T AssertVk(vk::ResultValue<T> resultValue, std::source_location loc = std::source_location::current())
+// Will return the value if assertion did not fail.
+[[nodiscard]] T AssertVk(vk::ResultValue<T> resultValue, std::source_location loc = std::source_location::current())
 {
-	if (resultValue.result != vk::Result::eSuccess)
-	{
-		LustraLib::Print(
-		    LustraLib::OutputLevelError,
-		    loc.file_name(),
-		    loc.function_name(),
-		    loc.line(),
-		    "Detected Vulkan Error: {}",
-		    vk::to_string(resultValue.result)
-		);
-
-		LUSTRA_ASSERT(false);
-	}
-
+	detail::AssertVkBase(resultValue.result, loc);
 	return std::move(resultValue.value);
+}
+
+// Will return result if assertion did not fail. This works on Vulkan C API result values through implicit casting.
+inline vk::Result AssertVk(vk::Result result, std::source_location loc = std::source_location::current())
+{
+	detail::AssertVkBase(result, loc);
+	return result;
 }
 
 // =================================

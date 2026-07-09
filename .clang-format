@@ -23,7 +23,6 @@ IndentPPDirectives: BeforeHash
 
 AlignConsecutiveAssignments: Consecutive
 AlignTrailingComments: Always
-AlignArrayOfStructures: Left
 AlignOperands: Align
 
 SortIncludes: CaseSensitive

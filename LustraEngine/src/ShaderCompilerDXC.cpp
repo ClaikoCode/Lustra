@@ -123,9 +123,12 @@ class DependencyTrackingIncludeHandler : public IDxcIncludeHandler
 
 namespace ShaderCompilation::DXC
 {
-
 	void Init()
 	{
+		ENSURE(sLibrary == nullptr);
+		ENSURE(sCompiler == nullptr);
+		ENSURE(sUtils == nullptr);
+
 		ASSERT_HR(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&sLibrary)));
 		ASSERT_HR(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&sCompiler)));
 		ASSERT_HR(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&sUtils)));

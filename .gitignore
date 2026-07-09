@@ -1,5 +1,6 @@
 # Environment specific files
 .vs/
+.idea/
 
 # Build files
 compile_commands.json

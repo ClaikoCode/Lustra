@@ -30,8 +30,6 @@ namespace Graphics
 
 	constexpr vk::Format gTargetDepthFormat = vk::Format::eD32Sfloat;
 
-	constexpr uint32_t gMaxFramesInFlight = 2u;
-
 	struct CommandQueue
 	{
 		vk::Queue queue = {};
@@ -49,6 +47,11 @@ namespace Graphics
 		std::vector<vk::Semaphore> semaphores;
 
 		void Destroy();
+
+		operator vk::SwapchainKHR() const
+		{
+			return swapchain;
+		}
 	};
 } // namespace Graphics
 
@@ -74,6 +77,9 @@ namespace Graphics
 	// VMA
 	inline VmaAllocator gVmaAllocator = {};
 
+	// TODO: Find a better way to solve this.
+	inline const Window* gWindowPtr = nullptr;
+
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	void SetupVulkan(std::string_view appName, const Window& window);
 	void TearDownVulkan();
@@ -87,8 +93,7 @@ namespace Graphics
 	void SetupSurface(const Window& window);
 	void CreateSwapchain(const Window& window);
 
-	void SetupRenderer();
-	void DestroyRenderer();
+	// Will call vkDeviceWaitIdle() to ensure all graphics work is done beyond the call.
+	void WaitForDevice();
 
-	void Render();
 } // namespace Graphics

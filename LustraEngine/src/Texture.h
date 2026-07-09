@@ -27,6 +27,11 @@ namespace GPUMemoryMan
 		DepthTexture(const DepthTexture&& other)            = delete;
 		DepthTexture& operator=(const DepthTexture& other)  = delete;
 		DepthTexture& operator=(const DepthTexture&& other) = delete;
+
+		operator vk::Image() const
+		{
+			return allocation.image;
+		}
 	};
 
 	void CreateDepthTexture(DepthTexture& depthTexture, uint32_t width, uint32_t height, vk::Format depthFormat);

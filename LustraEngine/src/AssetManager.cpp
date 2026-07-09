@@ -5,6 +5,8 @@
 #include "LustraLib/Assert.h"
 #include "ShaderCompilerDXC.h"
 
+#include <utility>
+
 static std::unordered_map<ShaderID, ShaderPackage> sShaderPackages;
 
 namespace
@@ -27,12 +29,12 @@ namespace AssetManager
 		}
 	}
 
-	void RegisterShader(ShaderID id, std::string_view shaderPath, ShaderType shaderType, ShaderCompiler compiler)
+	void RegisterShader(ShaderID id, std::filesystem::path shaderPath, ShaderType shaderType, ShaderCompiler compiler)
 	{
 		auto& shaderPackage = sShaderPackages[id];
 
 		shaderPackage.compiler            = compiler;
-		shaderPackage.compInfo.shaderPath = shaderPath;
+		shaderPackage.compInfo.shaderPath = std::move(shaderPath);
 		shaderPackage.compInfo.shaderType = shaderType;
 	}
 

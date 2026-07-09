@@ -5,8 +5,12 @@
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
+#include "LustraPaths.h"
 
 #include <array>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace
 {
@@ -56,15 +60,12 @@ namespace Renderer
 
 		// Shader objects
 		{
-			static const std::string sShaderPath     = "/home/jonathand/Projects/Lustra/LustraEngine/src/shaders/";
-			static const std::string sHLSLShaderPath = sShaderPath + "hlsl/";
-
 			AssetManager::RegisterShader(
-			    ShaderIDVSTest, sHLSLShaderPath + "VSTest.hlsl", ShaderTypeVS, ShaderCompilerDXC
+			    ShaderIDVSTest, fs::path(Lustra::Paths::kCoreHLSLDir) / "VSTest.hlsl", ShaderTypeVS, ShaderCompilerDXC
 			);
 
 			AssetManager::RegisterShader(
-			    ShaderIDFSTest, sHLSLShaderPath + "FSTest.hlsl", ShaderTypeFS, ShaderCompilerDXC
+			    ShaderIDFSTest, fs::path(Lustra::Paths::kCoreHLSLDir) / "FSTest.hlsl", ShaderTypeFS, ShaderCompilerDXC
 			);
 
 			AssetManager::BuildShadersFromDatabase();

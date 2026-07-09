@@ -5,3 +5,7 @@
 # Build files
 compile_commands.json
 out/
+
+# Run folder config: Ignore all but assets folder
+Run/*
+!Run/Assets/

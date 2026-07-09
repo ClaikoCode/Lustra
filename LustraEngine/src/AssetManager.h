@@ -4,6 +4,7 @@
 #include "ShaderCompilerShared.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <unordered_map>
 
 // Universally Unique Identifier
@@ -32,7 +33,7 @@ namespace AssetManager
 	void Setup();
 	void Destroy();
 
-	void RegisterShader(ShaderID id, std::string_view shaderPath, ShaderType shaderType, ShaderCompiler compiler);
+	void RegisterShader(ShaderID id, std::filesystem::path shaderPath, ShaderType shaderType, ShaderCompiler compiler);
 	void CompileHLSL(ShaderID id);
 	void CreateShaderModule(ShaderID id);
 

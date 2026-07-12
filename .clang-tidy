@@ -1,4 +1,8 @@
-Checks: >
+# -readability-uppercase-literal-suffix : I prefer 16u, 10.0f, etc.
+# -readability-redundant-member-init    : DMI suppresses -Wmissing-field-initializers
+# -readability-use-concise-preprocessor-directives : defined() is not hard to write
+# -modernize-return-braced-init-list : Explicit constructor returns are more clear IMO
+Checks: |
   bugprone-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
@@ -9,15 +13,16 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-avoid-c-arrays,
   -modernize-use-nodiscard,
-  -modernize-return-braced-init-list, # Explicit constructor returns are more clear IMO
-  -modernize-use-concise-preprocessor-directives # defined() is not hard to write
+  -modernize-return-braced-init-list,
 
   readability-*,
   -readability-magic-numbers,
   -readability-identifier-length,
   -readability-function-cognitive-complexity,
   -readability-else-after-return,
-  -readability-uppercase-literal-suffix, # I prefer using 16u, 10.0f, etc.
+  -readability-uppercase-literal-suffix,
+  -readability-redundant-member-init,
+  -readability-use-concise-preprocessor-directives,
 
   concurrency-*,
 
@@ -31,10 +36,6 @@ Checks: >
   cppcoreguidelines-pro-type-static-cast-downcast,
   cppcoreguidelines-slicing,
   cppcoreguidelines-special-member-functions
-
-
-CheckOptions:
-  misc-const-correctness.ConstStyle: west
 
 WarningsAsErrors: ''
 

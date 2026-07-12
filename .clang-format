@@ -24,6 +24,7 @@ IndentPPDirectives: BeforeHash
 AlignConsecutiveAssignments: Consecutive
 AlignTrailingComments: Always
 AlignOperands: Align
+QualifierAlignment: Left
 
 SortIncludes: CaseSensitive
 IncludeBlocks: Regroup

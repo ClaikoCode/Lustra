@@ -1,6 +1,5 @@
 #include "Window.h"
 
-#include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "SDL3/SDL.h"
 #include "SDLAssert.h"

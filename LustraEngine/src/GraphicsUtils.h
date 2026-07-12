@@ -5,7 +5,6 @@
 #include "LustraVulkan.h"
 
 #include <source_location>
-#include <vector>
 
 namespace detail
 {

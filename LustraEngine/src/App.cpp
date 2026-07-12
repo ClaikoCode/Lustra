@@ -2,7 +2,6 @@
 
 #include "AssetManager.h"
 #include "Graphics.h"
-#include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "Renderer.h"
 #include "SDL3/SDL.h"

@@ -1,11 +1,9 @@
 #pragma once
 
-#include "LustraLib/Assert.h"
 #include "LustraVulkan.h"
 #include "Resource.h"
 #include "ShaderCompilerShared.h"
 
-#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <unordered_map>

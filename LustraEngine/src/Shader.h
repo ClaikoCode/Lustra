@@ -2,6 +2,7 @@
 
 #include "LustraVulkan.h"
 #include "Resource.h"
+#include "ShaderCompilerShared.h"
 
 namespace Resource
 {

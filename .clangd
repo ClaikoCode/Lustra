@@ -3,7 +3,12 @@ CompileFlags:
 
 
 Diagnostics:
-  UnusedIncludes: None
-  MissingIncludes: None
-  ClangTidy:
-    FastCheckFilter: None
+  UnusedIncludes: Strict
+  Includes:
+    IgnoreHeader:
+      # Header proxy for specified way of including vulkan.hpp in Lustra.
+      - "LustraVulkan\\.h" 
+      # Ignore all files from vendored libraries.
+      - "vendor/.*"
+      # Header of headers for ease of use.
+      - "LustraLib\\.h"

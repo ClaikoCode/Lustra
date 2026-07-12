@@ -4,6 +4,9 @@
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
 #include "dxc/WinAdapter.h"
+#include "dxc/dxcapi.h"
+
+#include <string_view>
 
 static CComPtr<IDxcLibrary> sLibrary;
 static CComPtr<IDxcCompiler3> sCompiler;

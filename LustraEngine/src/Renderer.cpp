@@ -4,12 +4,9 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
-#include "LustraLib/Utils.h"
-#include "LustraPaths.h"
 #include "Shader.h"
 
 #include <array>
-#include <filesystem>
 
 namespace fs = std::filesystem;
 

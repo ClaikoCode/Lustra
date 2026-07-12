@@ -4,9 +4,7 @@
 #include "Window.h"
 #include "vma/vk_mem_alloc.h"
 
-#include <array>
 #include <cstdint>
-#include <optional>
 #include <string_view>
 #include <vector>
 

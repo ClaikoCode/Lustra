@@ -8,12 +8,8 @@
 #include "LustraLib/LustraLib.h"
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
-#include "ShaderCompilerDXC.h"
-#include "Texture.h"
 
 #include <algorithm>
-#include <optional>
-#include <unordered_map>
 #include <vector>
 
 // Single global default dispatcher storage. Should only pertain to a single TU.
@@ -474,7 +470,7 @@ namespace Graphics
 			ENSURE(transferQueue.index != UINT32_MAX);
 		}
 
-		std::vector<const char*> const requestedDeviceExtensions = {"VK_KHR_swapchain"};
+		const std::vector<const char*> requestedDeviceExtensions = {"VK_KHR_swapchain"};
 
 		// Check if requested device extensions are available
 		{

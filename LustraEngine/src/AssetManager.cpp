@@ -7,7 +7,6 @@
 #include "Shader.h"
 #include "ShaderCompilerDXC.h"
 
-#include <unordered_map>
 #include <utility>
 
 namespace

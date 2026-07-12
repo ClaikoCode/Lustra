@@ -2,7 +2,6 @@
 
 #include "LustraLib/Assert.h"
 #include "LustraVulkan.h"
-#include "ShaderCompilerShared.h"
 #include "vma/vk_mem_alloc.h"
 
 #include <concepts>

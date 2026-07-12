@@ -21,7 +21,7 @@ void Window::InitWindow(const char* name, uint32_t width, uint32_t height)
 
 	// Creating SDL window with Vulkan flag automatically load the default Vulkan library using
 	// SDL_Vulkan_LoadLibrary() if it has not been called before.
-	m_windowPtr = SDL_CreateWindow(name, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
+	m_windowPtr = SDL_CreateWindow(name, (int)width, (int)height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 
 	ASSERT_SDL(m_windowPtr != nullptr, "SDL could not create window");
 }

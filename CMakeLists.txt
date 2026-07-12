@@ -29,7 +29,7 @@ if(MSVC)
 	add_compile_options(/Zc:preprocessor) # Preprocessor conformance mode (fixes __VA_OPT__ support).
 else()
 	message(STATUS "Using non-MSVC compile flags")
-	add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wshadow -Wdouble-promotion -Wnon-virtual-dtor)
+	add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wshadow -Wdouble-promotion -Wnon-virtual-dtor -Wconversion -Wsign-conversion)
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
 		add_compile_options(-stdlib=libc++)
 		add_link_options(-stdlib=libc++)

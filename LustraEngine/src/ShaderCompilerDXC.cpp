@@ -61,7 +61,7 @@ namespace
 } // namespace
 
 // Saves all the filenames of included files during shader compilation.
-class DependencyTrackingIncludeHandler : public IDxcIncludeHandler
+class DependencyTrackingIncludeHandler final : public IDxcIncludeHandler
 {
   public:
 	DependencyTrackingIncludeHandler(IDxcUtils* pUtils)

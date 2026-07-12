@@ -208,20 +208,3 @@ namespace GraphicsUtils
 	}
 
 } // namespace GraphicsUtils
-
-void _AssertVkBase(vk::Result result, const std::source_location& loc)
-{
-	// Negative VkResult = real error. Zero/positive = success or info code.
-	if (static_cast<std::int32_t>(result) < 0)
-	{
-		LustraLib::Print(
-		    LustraLib::OutputLevelError,
-		    loc.file_name(),
-		    loc.function_name(),
-		    loc.line(),
-		    "Detected Vulkan Error: {}",
-		    vk::to_string(result)
-		);
-		LUSTRA_ASSERT(false);
-	}
-}

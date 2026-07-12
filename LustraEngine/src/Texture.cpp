@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <unordered_set>
 
-namespace GPUMemoryMan
+using namespace detail;
+
+namespace Resource
 {
 	vk::ResultValue<ImageAllocation> AllocateImage(const vk::ImageCreateInfo& imageInfo)
 	{
@@ -37,10 +39,8 @@ namespace GPUMemoryMan
 		}
 	}
 
-	void CreateDepthTexture(DepthTexture& depthTexture, uint32_t width, uint32_t height, vk::Format depthFormat)
+	Handle<DepthTexture> CreateDepthTexture(uint32_t width, uint32_t height, vk::Format depthFormat)
 	{
-		VALIDATE(depthTexture.allocation.image == nullptr);
-
 		static const std::unordered_set<vk::Format> sValidDepthFormats = {
 		    // Pure depth
 		    vk::Format::eD32Sfloat,
@@ -54,6 +54,9 @@ namespace GPUMemoryMan
 
 		const bool isValidDepthFormat = std::ranges::contains(sValidDepthFormats, depthFormat);
 		ENSURE_EX(isValidDepthFormat, "Invalid depth format.");
+
+		Handle<DepthTexture> depthHandle = Resource::PoolInstance<Resource::DepthTexture>().Allocate();
+		DepthTexture& depthTexture       = *depthHandle.Get();
 
 		const vk::ImageCreateInfo depthCreateInfo = {
 		    .imageType     = vk::ImageType::e2D,
@@ -81,14 +84,19 @@ namespace GPUMemoryMan
 
 		depthTexture.width  = depthCreateInfo.extent.width;
 		depthTexture.height = depthCreateInfo.extent.height;
+
+		return depthHandle;
 	}
 
-	void DestroyDepthTexture(DepthTexture& depthTex)
+	void DestroyDepthTexture(Handle<DepthTexture> depthTex)
 	{
-		if (depthTex.view)
+		DepthTexture* depthTexturePtr = depthTex.Get();
+		ENSURE(depthTexturePtr != nullptr);
+
+		if (depthTexturePtr->view)
 		{
-			Graphics::gVkDevice.destroyImageView(depthTex.view, Graphics::gAllocationCallbacks);
-			FreeImageAllocation(depthTex.allocation);
+			Graphics::gVkDevice.destroyImageView(depthTexturePtr->view, Graphics::gAllocationCallbacks);
+			FreeImageAllocation(depthTexturePtr->allocation);
 		}
 	}
-} // namespace GPUMemoryMan
+} // namespace Resource

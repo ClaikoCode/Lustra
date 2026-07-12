@@ -6,10 +6,10 @@
 #include <unordered_set>
 #include <vector>
 
-enum ShaderCompiler : uint8_t
+enum class ShaderCompiler : uint8_t
 {
-	ShaderCompilerUnknown = 0,
-	ShaderCompilerDXC
+	Unknown = 0,
+	DXC
 };
 
 enum ShaderModel : uint8_t // NOLINT(readability-enum-initial-value)
@@ -69,14 +69,14 @@ static inline std::string ShaderTypeToString(ShaderType shaderType)
 
 struct ShaderCompilationInfo
 {
-	std::filesystem::path shaderPath;
 	std::string entryPoint = "main";
 
-	// Holds macro defines inserted into the shader.
-	std::vector<std::string> defines;
+	ShaderType shaderType            = ShaderTypeUnknown;
+	ShaderModel shaderModel          = ShaderModelLatest;
+	std::filesystem::path shaderPath = {};
 
-	ShaderType shaderType;
-	ShaderModel shaderModel = ShaderModelLatest;
+	// Holds macro defines inserted into the shader.
+	std::vector<std::string> defines = {};
 };
 
 struct ShaderArtifact

@@ -3,105 +3,114 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
+#include "LustraPaths.h"
+#include "Shader.h"
 #include "ShaderCompilerDXC.h"
 
+#include <unordered_map>
 #include <utility>
-
-static std::unordered_map<ShaderID, ShaderPackage> sShaderPackages;
 
 namespace
 {
+	AssetDatabase gAssetDatabase;
 } // namespace
 
 namespace AssetManager
 {
-
 	void Setup()
 	{
 		ShaderCompilation::DXC::Init();
+
+		gAssetDatabase.AddShader(
+		    AssetKeyShaderFSTest,
+		    Lustra::Paths::HLSLDir() / "FSTest.hlsl",
+		    Metadata::Shader{.shaderType = ShaderTypeFS, .compiler = ShaderCompiler::DXC}
+		);
+
+		gAssetDatabase.AddShader(
+		    AssetKeyShaderVSTest,
+		    Lustra::Paths::HLSLDir() / "VSTest.hlsl",
+		    Metadata::Shader{.shaderType = ShaderTypeVS, .compiler = ShaderCompiler::DXC}
+		);
 	}
 
 	void Destroy()
 	{
-		for (auto& [_, shaderPackage] : sShaderPackages)
+		// Destroy shaders
 		{
-			Graphics::gVkDevice.destroy(shaderPackage.module, Graphics::gAllocationCallbacks);
+			auto& shaderRegistry = GetHandleRegistry<Resource::Shader>();
+
+			for (auto& [id, shaderHandle] : shaderRegistry)
+			{
+				Resource::DestroyShader(shaderHandle);
+
+				shaderHandle.Release();
+			}
 		}
 	}
 
-	void RegisterShader(ShaderID id, std::filesystem::path shaderPath, ShaderType shaderType, ShaderCompiler compiler)
+	void CompileAndBuildShader(AssetID id)
 	{
-		auto& shaderPackage = sShaderPackages[id];
+		const AssetEntry& assetEntry     = GetEntry(id);
+		Resource::Shader* shaderResource = GetHandle<Resource::Shader>(id).Get();
+		ENSURE(shaderResource != nullptr);
 
-		shaderPackage.compiler            = compiler;
-		shaderPackage.compInfo.shaderPath = std::move(shaderPath);
-		shaderPackage.compInfo.shaderType = shaderType;
-	}
+		const auto& shaderMeta = assetEntry.GetMetadata<Metadata::Shader>();
 
-	void CompileHLSL(ShaderID id)
-	{
-		auto& shaderPackage = sShaderPackages[id];
+		const ShaderCompilationInfo compInfo = {
+		    .entryPoint  = shaderMeta.entryPoint,
+		    .shaderType  = shaderMeta.shaderType,
+		    .shaderModel = shaderMeta.shaderModel,
+		    .shaderPath  = assetEntry.assetPath,
+		    .defines     = {},
+		};
 
 		const std::vector<std::string> includeDirs = {};
-		ENSURE(ShaderCompilation::DXC::CompileShader(shaderPackage.compInfo, includeDirs, shaderPackage.artifact));
-	}
+		bool compSuccessful                        = false;
+		switch (shaderMeta.compiler)
+		{
+			case ShaderCompiler::DXC:
+				compSuccessful = ShaderCompilation::DXC::CompileShader(compInfo, includeDirs, shaderResource->artifact);
+				break;
 
-	void CreateShaderModule(ShaderID id)
-	{
-		ShaderPackage& shaderPackage = sShaderPackages.at(id);
+			default:
+				PRINT_ERROR("Unknown shader compiler type.");
+				CHECK_UNREACHABLE();
+		}
 
-		ENSURE(!shaderPackage.artifact.spirvData.empty());
+		ENSURE(compSuccessful);
 
 		// Destroy previous module if it already exists.
 		// This means that the caller has to guarantee that the shader module is not in use before re-creation.
-		if (shaderPackage.module != nullptr)
+		if (shaderResource->module != nullptr)
 		{
-			Graphics::gVkDevice.destroyShaderModule(shaderPackage.module, Graphics::gAllocationCallbacks);
+			Graphics::gVkDevice.destroyShaderModule(shaderResource->module, Graphics::gAllocationCallbacks);
 		}
 
 		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
-		    .codeSize = shaderPackage.artifact.spirvData.size(),
-		    .pCode    = reinterpret_cast<const uint32_t*>(shaderPackage.artifact.spirvData.data()),
+		    .codeSize = shaderResource->artifact.spirvData.size(),
+		    .pCode    = reinterpret_cast<const uint32_t*>(shaderResource->artifact.spirvData.data()),
 		};
 
-		shaderPackage.module =
+		shaderResource->module =
 		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
 	}
 
 	void BuildShadersFromDatabase()
 	{
-		for (auto& [id, _] : sShaderPackages)
+		PRINT_DEBUG("Building shaders from database.");
+
+		for (const auto& [id, assetEntry] : gAssetDatabase.GetDB())
 		{
-			CompileHLSL(id);
-			CreateShaderModule(id);
+			if (assetEntry.assetType == AssetType::Shader)
+			{
+				CompileAndBuildShader(id);
+			}
 		}
 	}
 
-	ShaderPackage& GetShaderPackage(ShaderID id)
+	const AssetEntry& GetEntry(AssetID id)
 	{
-		auto iterator = sShaderPackages.find(id);
-		ENSURE_EX(iterator != sShaderPackages.end(), "Shader '{}' has not been registered yet.", static_cast<UUID>(id));
-
-		return iterator->second;
-	}
-
-	vk::ShaderModule GetShaderModule(ShaderID id)
-	{
-		const ShaderPackage& shaderPackage = GetShaderPackage(id);
-
-		ENSURE_EX(
-		    shaderPackage.module != VK_NULL_HANDLE,
-		    "Shader module for '{}' has not been created yet.",
-		    shaderPackage.compInfo.shaderPath.string()
-		);
-
-		return shaderPackage.module;
-	}
-
-	std::string_view GetShaderEntryPoint(ShaderID id)
-	{
-		const ShaderPackage& shaderPackage = GetShaderPackage(id);
-
-		return shaderPackage.compInfo.entryPoint;
+		return gAssetDatabase.GetEntry(id);
 	}
 } // namespace AssetManager

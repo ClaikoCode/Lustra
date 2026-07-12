@@ -1,32 +1,29 @@
 #pragma once
 
 #include "LustraVulkan.h"
+#include "Resource.h"
 #include "vma/vk_mem_alloc.h"
 
 #include <cstdint>
 
-namespace GPUMemoryMan
+namespace detail
 {
 	struct ImageAllocation
 	{
 		VmaAllocation vmaAllocation = nullptr;
 		vk::Image image             = nullptr;
 	};
+} // namespace detail
 
-	struct DepthTexture
+namespace Resource
+{
+	struct DepthTexture : ResourceTag
 	{
 		uint32_t width  = UINT32_MAX;
 		uint32_t height = UINT32_MAX;
 
-		ImageAllocation allocation = {};
-		vk::ImageView view         = nullptr;
-
-		DepthTexture()                                      = default;
-		~DepthTexture()                                     = default;
-		DepthTexture(const DepthTexture& other)             = delete;
-		DepthTexture(const DepthTexture&& other)            = delete;
-		DepthTexture& operator=(const DepthTexture& other)  = delete;
-		DepthTexture& operator=(const DepthTexture&& other) = delete;
+		detail::ImageAllocation allocation = {};
+		vk::ImageView view                 = nullptr;
 
 		operator vk::Image() const
 		{
@@ -34,7 +31,7 @@ namespace GPUMemoryMan
 		}
 	};
 
-	void CreateDepthTexture(DepthTexture& depthTexture, uint32_t width, uint32_t height, vk::Format depthFormat);
-	void DestroyDepthTexture(DepthTexture& depthTex);
+	Handle<DepthTexture> CreateDepthTexture(uint32_t width, uint32_t height, vk::Format depthFormat);
+	void DestroyDepthTexture(Handle<DepthTexture> depthTex);
 
-} // namespace GPUMemoryMan
+} // namespace Resource

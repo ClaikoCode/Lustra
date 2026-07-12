@@ -14,7 +14,7 @@ namespace Renderer
 
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
-	inline GPUMemoryMan::DepthTexture gSceneDepth;
+	inline Handle<Resource::DepthTexture> gSceneDepth;
 	inline std::array<FrameResources, gMaxFramesInFlight> gFramesInFlight = {};
 
 	inline vk::PipelineLayout gHelloTrianglePipelineLayout;

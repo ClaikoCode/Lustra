@@ -10,7 +10,8 @@ static CComPtr<IDxcCompiler3> sCompiler;
 static CComPtr<IDxcUtils> sUtils;
 
 // Temporary assert for HR values.
-#define ASSERT_HR(hrExpression) ENSURE_EX(SUCCEEDED((hrExpression)), "HR Failed")
+#define ASSERT_HR(hrExpression)                                                                                        \
+	ENSURE_EX(SUCCEEDED((hrExpression)), "HR Failed. This is going to be more descriptive in the future.")
 
 namespace
 {

@@ -6,6 +6,7 @@
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
 #include "LustraPaths.h"
+#include "Shader.h"
 
 #include <array>
 #include <filesystem>
@@ -14,12 +15,13 @@ namespace fs = std::filesystem;
 
 namespace
 {
-	vk::PipelineShaderStageCreateInfo ShaderStageInfoFromShaderPackage(ShaderID id)
+	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
 	{
-		const ShaderPackage& shaderPackage = AssetManager::GetShaderPackage(id);
+		const auto& shaderMeta         = AssetManager::GetEntry(id).GetMetadata<Metadata::Shader>();
+		const Resource::Shader* shader = AssetManager::GetHandle<Resource::Shader>(id).Get();
 
 		vk::ShaderStageFlagBits shaderStage;
-		switch (shaderPackage.compInfo.shaderType)
+		switch (shaderMeta.shaderType)
 		{
 			case ShaderTypeVS:
 				shaderStage = vk::ShaderStageFlagBits::eVertex;
@@ -36,7 +38,7 @@ namespace
 		}
 
 		vk::PipelineShaderStageCreateInfo info = {
-		    .stage = shaderStage, .module = shaderPackage.module, .pName = shaderPackage.compInfo.entryPoint.c_str()
+		    .stage = shaderStage, .module = shader->module, .pName = shaderMeta.entryPoint.c_str()
 		};
 
 		return info;
@@ -51,23 +53,15 @@ namespace Renderer
 {
 	void Setup()
 	{
-		// Depth creation
+		// Scene depth creation
 		{
-			GPUMemoryMan::CreateDepthTexture(
-			    gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height, vk::Format::eD32Sfloat
+			gSceneDepth = Resource::CreateDepthTexture(
+			    Graphics::gSwapchain.width, Graphics::gSwapchain.height, vk::Format::eD32Sfloat
 			);
 		}
 
 		// Shader objects
 		{
-			AssetManager::RegisterShader(
-			    ShaderIDVSTest, fs::path(Lustra::Paths::kCoreHLSLDir) / "VSTest.hlsl", ShaderTypeVS, ShaderCompilerDXC
-			);
-
-			AssetManager::RegisterShader(
-			    ShaderIDFSTest, fs::path(Lustra::Paths::kCoreHLSLDir) / "FSTest.hlsl", ShaderTypeFS, ShaderCompilerDXC
-			);
-
 			AssetManager::BuildShadersFromDatabase();
 		}
 
@@ -79,7 +73,7 @@ namespace Renderer
 			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
 
 			const std::array shaderStages = {
-			    ::ShaderStageInfoFromShaderPackage(ShaderIDVSTest), ::ShaderStageInfoFromShaderPackage(ShaderIDFSTest)
+			    ::CreateShaderStageInfo(AssetKeyShaderVSTest), ::CreateShaderStageInfo(AssetKeyShaderFSTest)
 			};
 
 			// Describe how vertices are layed out in memory and in what primitives they describe.
@@ -205,7 +199,8 @@ namespace Renderer
 
 	void Destroy()
 	{
-		GPUMemoryMan::DestroyDepthTexture(gSceneDepth);
+		Resource::DestroyDepthTexture(gSceneDepth);
+		gSceneDepth.Release();
 
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gHelloTrianglePipelineLayout, Graphics::gAllocationCallbacks);
@@ -307,7 +302,7 @@ namespace Renderer
 			        .dstAccessMask    = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 			        .oldLayout        = vk::ImageLayout::eUndefined,
 			        .newLayout        = vk::ImageLayout::eDepthAttachmentOptimal,
-			        .image            = gSceneDepth,
+			        .image            = *gSceneDepth.Get(),
 			        .subresourceRange = {
 			            .aspectMask     = vk::ImageAspectFlagBits::eDepth,
 			            .baseMipLevel   = 0,
@@ -333,7 +328,7 @@ namespace Renderer
 			};
 
 			const vk::RenderingAttachmentInfo depthAttachInfo = {
-			    .imageView   = gSceneDepth.view,
+			    .imageView   = gSceneDepth.Get()->view,
 			    .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
 			    .loadOp      = vk::AttachmentLoadOp::eClear,
 			    .storeOp     = vk::AttachmentStoreOp::eDontCare,

@@ -11,7 +11,7 @@ endif()
 # Tell CMake to use the old behavior for this policy
 # This prevents it from trying to set MSVC-specific debug format
 if(POLICY CMP0141)
-  cmake_policy(SET CMP0141 OLD)
+	cmake_policy(SET CMP0141 OLD)
 endif()
 
 project(Lustra DESCRIPTION "Lustra Engine + Lib" LANGUAGES C CXX)
@@ -29,7 +29,7 @@ if(MSVC)
 	add_compile_options(/Zc:preprocessor) # Preprocessor conformance mode (fixes __VA_OPT__ support).
 else()
 	message(STATUS "Using non-MSVC compile flags")
-	add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+	add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wshadow) # -Wdouble-promotion -Wnon-virtual-dtor)
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
 		add_compile_options(-stdlib=libc++)
 		add_link_options(-stdlib=libc++)

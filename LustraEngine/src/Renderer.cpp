@@ -155,14 +155,17 @@ namespace Renderer
 
 		// Sync resources
 		{
-			const vk::SemaphoreTypeCreateInfo semaphoreTypeInfo = {
-			    .semaphoreType = vk::SemaphoreType::eTimeline, .initialValue = gMaxFramesInFlight
-			};
+			// Timeline semaphore.
+			{
+				const vk::SemaphoreTypeCreateInfo semaphoreTypeInfo = {
+				    .semaphoreType = vk::SemaphoreType::eTimeline, .initialValue = gMaxFramesInFlight
+				};
 
-			const vk::SemaphoreCreateInfo semaphoreInfo = {.pNext = &semaphoreTypeInfo};
+				const vk::SemaphoreCreateInfo semaphoreInfo = {.pNext = &semaphoreTypeInfo};
 
-			gTimelineSemaphore =
-			    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
+				gTimelineSemaphore =
+				    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
+			}
 
 			// Per frame image-acquire semaphores.
 			for (FrameResources& frameResource : gFramesInFlight)

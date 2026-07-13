@@ -10,6 +10,8 @@
 
 namespace fs = std::filesystem;
 
+static constexpr uint64_t kInfiniteWait = UINT64_MAX;
+
 namespace
 {
 	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
@@ -236,17 +238,22 @@ namespace Renderer
 		    .semaphoreCount = 1, .pSemaphores = &gTimelineSemaphore, .pValues = &waitValue
 		};
 
-		AssertVk(Graphics::gVkDevice.waitSemaphores(waitInfo, UINT64_MAX));
+		// Force the CPU to wait for the GPU to be done with last session of the same resources that are going to be
+		// worked on THIS frame.
+		AssertVk(Graphics::gVkDevice.waitSemaphores(waitInfo, kInfiniteWait));
 
+		// GPU has signaled that resources are free to use so its time to fetch them and prep for recording commands.
 		const FrameResources& frameResources = gFramesInFlight[frameResourceIndex];
 		AssertVk(Graphics::gVkDevice.resetCommandPool(frameResources.commandPool));
 
+		// This semaphore will be used to check if the image we are going to be rendering to later is free to write to.
 		const vk::Semaphore imageAcquireSemaphore = frameResources.imageAcquiredSemaphore;
 
-		auto imageAcquireResultValue =
-		    Graphics::gVkDevice.acquireNextImageKHR(Graphics::gSwapchain.swapchain, UINT64_MAX, imageAcquireSemaphore);
-
-		AssertVk(imageAcquireResultValue.result);
+		// Ask the device if it has a swapchain index it knows is going to be available for writes later and bind it
+		// with the semaphore.
+		auto imageAcquireResultValue = Graphics::gVkDevice.acquireNextImageKHR(
+		    Graphics::gSwapchain.swapchain, kInfiniteWait, imageAcquireSemaphore
+		);
 
 		// Image is out of date and swapchain must be recreated.
 		if (imageAcquireResultValue.result == vk::Result::eErrorOutOfDateKHR)
@@ -258,6 +265,11 @@ namespace Renderer
 		else if (imageAcquireResultValue.result == vk::Result::eSuboptimalKHR)
 		{
 			sShouldRecreateSwapchain = true;
+		}
+		else
+		{
+			// If not any of the plausible values above, assert it to check if its an error.
+			AssertVk(imageAcquireResultValue.result);
 		}
 
 		const uint32_t imageIndex             = imageAcquireResultValue.value;
@@ -391,45 +403,68 @@ namespace Renderer
 			AssertVk(commandBuffer.end());
 		}
 
-		const vk::SemaphoreSubmitInfo imageAcquiredWaitInfo = {
-		    .semaphore = imageAcquireSemaphore,
-		    .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput // Wait before drawing to image.
-		};
+		// Submit and Present
+		{
+			const vk::Semaphore renderingCompleteSemaphore = Graphics::gSwapchain.semaphores[imageIndex];
+			const vk::SwapchainKHR swapchain               = Graphics::gSwapchain.swapchain;
+			const vk::Queue graphicsQueue                  = Graphics::graphicsQueue.queue;
 
-		const std::array semaphoreSignals = {
-		    vk::SemaphoreSubmitInfo{
-		        .semaphore = Graphics::gSwapchain.semaphores[imageIndex],
-		        .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput
-		    },
-		    vk::SemaphoreSubmitInfo{
-		        .semaphore = gTimelineSemaphore,
-		        .value     = signalValue,
-		        .stageMask = vk::PipelineStageFlagBits2::eAllCommands
-		    }
-		};
+			// We have the index for which swapchain image we are going to write to but now we have to wait for the
+			// image at that index to actually be available. This semaphore is tied to the swapchain image so as soon as
+			// the image at the index that was given to prior can be written to, a signal is sent.
+			// NOTE: This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
+			// semaphore to be signaled at the point of trying to bind the image for color output in the pipeline.
+			// Earlier pipeline stages are free to run.
+			// TODO: Work should be split into different command buffers because this wait waits on the FIRST instance
+			// of color output attachement, even if the target is not the swapchain. This wait should only be for the
+			// command buffer that has commands that will write to the swapchain, all other kind of work should be
+			// separate to avoid unecessary GPU stalls.
+			const vk::SemaphoreSubmitInfo imageAcquiredWaitInfo = {
+			    .semaphore = imageAcquireSemaphore, .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput
+			};
 
-		const vk::CommandBufferSubmitInfo cmdSubmitInfo = {.commandBuffer = commandBuffer};
-		const vk::SubmitInfo2 submitInfo                = {
-		    .waitSemaphoreInfoCount   = 1,
-		    .pWaitSemaphoreInfos      = &imageAcquiredWaitInfo,
-		    .commandBufferInfoCount   = 1,
-		    .pCommandBufferInfos      = &cmdSubmitInfo,
-		    .signalSemaphoreInfoCount = semaphoreSignals.size(),
-		    .pSignalSemaphoreInfos    = semaphoreSignals.data()
-		};
+			const std::array semaphoreSignals = {
+			    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once all
+			    // GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
+			    vk::SemaphoreSubmitInfo{
+			        .semaphore = renderingCompleteSemaphore, .stageMask = vk::PipelineStageFlagBits2::eAllGraphics
+			    },
+			    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames signal
+			    // value to finally communicate that all resources associated with this frame has been completed.
+			    vk::SemaphoreSubmitInfo{
+			        .semaphore = gTimelineSemaphore,
+			        .value     = signalValue,
+			        .stageMask = vk::PipelineStageFlagBits2::eAllCommands
+			    }
+			};
 
-		// Submit all commands
-		AssertVk(Graphics::graphicsQueue.queue.submit2(1, &submitInfo, VK_NULL_HANDLE));
+			const vk::CommandBufferSubmitInfo cmdSubmitInfo = {.commandBuffer = commandBuffer};
+			const vk::SubmitInfo2 submitInfo                = {
+			    .waitSemaphoreInfoCount = 1,
+			    // Semaphores to be waited on before executing command buffer.
+			    .pWaitSemaphoreInfos      = &imageAcquiredWaitInfo,
+			    .commandBufferInfoCount   = 1,
+			    .pCommandBufferInfos      = &cmdSubmitInfo,
+			    .signalSemaphoreInfoCount = semaphoreSignals.size(),
+			    // Semaphores to signal once certain stages of the pipeline have been completed.
+			    .pSignalSemaphoreInfos = semaphoreSignals.data()
+			};
 
-		const vk::PresentInfoKHR presentInfo = {
-		    .waitSemaphoreCount = 1,
-		    .pWaitSemaphores    = &Graphics::gSwapchain.semaphores[imageIndex],
-		    .swapchainCount     = 1,
-		    .pSwapchains        = &Graphics::gSwapchain.swapchain,
-		    .pImageIndices      = &imageIndex,
-		    .pResults           = nullptr
-		};
+			// Submit all commands.
+			AssertVk(graphicsQueue.submit2(1, &submitInfo, VK_NULL_HANDLE));
 
-		AssertVk(Graphics::graphicsQueue.queue.presentKHR(presentInfo));
+			const vk::PresentInfoKHR presentInfo = {
+			    .waitSemaphoreCount = 1,
+			    // Waits for the semaphore that will trigger once all graphcis rendering is complete.
+			    .pWaitSemaphores = &renderingCompleteSemaphore,
+			    .swapchainCount  = 1,
+			    .pSwapchains     = &swapchain,
+			    .pImageIndices   = &imageIndex,
+			    .pResults        = nullptr
+			};
+
+			// Present the swapchain image.
+			AssertVk(graphicsQueue.presentKHR(presentInfo));
+		}
 	}
 } // namespace Renderer

@@ -4,6 +4,7 @@
 #include "Graphics.h"
 #include "LustraLib/Logger.h"
 #include "Renderer.h"
+#include "Resource.h"
 #include "SDL3/SDL.h"
 #include "SDL3/SDL_vulkan.h"
 #include "SDLAssert.h"
@@ -64,6 +65,7 @@ bool App::RunApp()
 
 	Renderer::Destroy();
 	AssetManager::Destroy();
+	Resource::ClearPoolsGPUMemory();
 	Graphics::TearDownVulkan();
 
 	// False means a quit without errors

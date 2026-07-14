@@ -1,7 +1,6 @@
 #pragma once
 
 #include "LustraVulkan.h"
-#include "Resource.h"
 #include "ShaderCompilerShared.h"
 
 #include <cstdint>
@@ -68,7 +67,8 @@ MetadataPtr make_metadata_ptr(Args&&... args)
 	return MetadataPtr(new T(std::forward<Args>(args)...), [](void* p) { delete static_cast<T*>(p); });
 }
 
-// Should only hold the information enough to load into resource pools
+// An entry into the asset database.
+// Should only hold the information enough to load as a runtime resource and put into resource pools.
 struct AssetEntry
 {
 	AssetType assetType = AssetType::Unknown;
@@ -123,45 +123,6 @@ namespace AssetManager
 {
 	void Setup();
 	void Destroy();
-
-	// Because the compiled spirv and the shader module are so coupled, they are handled in the same function.
-	// NOTE: Make sure to wait for GPU if shaders are re-compiled so module does not get overwritten whilst being used.
-	void CompileAndBuildShader(AssetID id);
-
-	// Will both compile all shaders and create shader modules for them.
-	void BuildShadersFromDatabase();
-
-	template <ResourceType T>
-	std::unordered_map<AssetID, Handle<T>>& GetHandleRegistry()
-	{
-		static std::unordered_map<AssetID, Handle<T>> handleRegistry;
-
-		return handleRegistry;
-	}
-
-	template <ResourceType T>
-	// Get a handle given an ID, assuming it to exist in the database.
-	inline Handle<T> GetHandle(AssetID id)
-	{
-		auto& handleRegistry = GetHandleRegistry<T>();
-
-		auto it = handleRegistry.find(id);
-
-		// If never seen before, allocate the resource, add it to the registry, and give back the new handle.
-		if (it == handleRegistry.end())
-		{
-			ResourcePool<T>& poolInstance = Resource::PoolInstance<T>();
-
-			Handle<T> handle   = poolInstance.Allocate();
-			handleRegistry[id] = handle;
-
-			return handle;
-		}
-		else
-		{
-			return it->second;
-		}
-	}
 
 	const AssetEntry& GetEntry(AssetID id);
 }; // namespace AssetManager

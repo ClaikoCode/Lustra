@@ -62,4 +62,5 @@ namespace Utils
 
 		return std::wstring(wideString, numberOfCharsWritten);
 	}
+
 } // namespace Utils

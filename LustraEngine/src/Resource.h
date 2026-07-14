@@ -1,21 +1,12 @@
 #pragma once
 
 #include "LustraLib/Assert.h"
+#include "LustraLib/Utils.h"
 #include "LustraVulkan.h"
+#include "ResourceTag.h"
 #include "vma/vk_mem_alloc.h"
 
-#include <concepts>
-
-struct ResourceTag
-{
-	// This is a struct that all resources should inherit from.
-	// Its purpose is to be able to identify if a type is a resource or not to differentiate them from other normal data
-	// structures.
-};
-
-// Concept that is to be checked by anything that is tied to templated usage of resources.
-template <typename T>
-concept ResourceType = std::derived_from<T, ResourceTag>;
+#include <functional>
 
 template <ResourceType T>
 struct Handle // Lightweight versioned resource handle
@@ -74,6 +65,8 @@ struct ResourcePool
 		pool.back().nextFree = kEndIndexSentinel;
 
 		freeEntryHead = 0u;
+
+		PRINT_LOG("Constructed '{}' pool.", Utils::TypeName<T>());
 	}
 
 	std::vector<uint32_t> GetIndicesOfAliveObjects()
@@ -100,7 +93,7 @@ struct ResourcePool
 	}
 
 	// Manually calls destructors on all allocated slots.
-	// NOTE: Deallocation of GPU resources is done separately during a Destroy call.
+	// NOTE: Deallocation of GPU resources is done separately.
 	~ResourcePool()
 	{
 		const std::vector<uint32_t> aliveObjectIndices = GetIndicesOfAliveObjects();
@@ -111,11 +104,36 @@ struct ResourcePool
 
 			if (aliveSlot.refCount > 0)
 			{
-				PRINT_WARNING("Deleting object with {} references left", aliveSlot.refCount);
+				PRINT_WARNING(
+				    "Calling deconstructor of '{}' object with {} references left. Make sure all resource handles are "
+				    "released beforehand.",
+				    Utils::TypeName<T>(),
+				    aliveSlot.refCount
+				);
 			}
 
 			aliveSlot.object.~T();
 		}
+
+		PRINT_DEBUG("Destroyed '{}' CPU objects.", Utils::TypeName<T>());
+	}
+
+	// Asks for a function that will destroy the GPU resources held by a certain resource.
+	void DestroyObjectsGPUMemory(std::function<void(Handle<T>)> gpuDestroyerFunc)
+	{
+		const std::vector<uint32_t> aliveObjectIndices = GetIndicesOfAliveObjects();
+
+		for (const uint32_t index : aliveObjectIndices)
+		{
+			gpuDestroyerFunc(
+			    Handle<T>{
+			        .index      = index,
+			        .generation = pool[index].generation,
+			    }
+			);
+		}
+
+		PRINT_DEBUG("Destroyed '{}' GPU memory.", Utils::TypeName<T>());
 	}
 
 	T* Get(const Handle<T> handle)
@@ -136,7 +154,8 @@ struct ResourcePool
 	}
 
 	// Initial allocation of object (refcount = 1)
-	[[nodiscard]] Handle<T> Allocate(T&& object = {})
+	// Ensures that the handle given back is valid and usable.
+	[[nodiscard]] Handle<T> Allocate()
 	{
 		ENSURE_EX(
 		    freeEntryHead != kEndIndexSentinel, "Resource pool is full. Make sure you are allocating responsibly."
@@ -151,7 +170,7 @@ struct ResourcePool
 		// deallocate its resources before consuming the rvalue object. However, Pool is doing manual lifetime
 		// management and T is never constructed until this point and might try to deallocate resources it never had, so
 		// an in memory construction is required.
-		new (&freeSlot.object) T(std::move(object));
+		new (&freeSlot.object) T{};
 		freeSlot.refCount = 1;
 
 		return Handle<T>{.index = slotIndex, .generation = freeSlot.generation};
@@ -217,10 +236,14 @@ namespace Resource
 	}
 
 	template <ResourceType T>
-	inline Handle<T> Allocate()
+	[[nodiscard]] inline Handle<T> Allocate()
 	{
 		return PoolInstance<T>().Allocate();
 	}
+
+	// Will explicitly call for destruction of resource pools of different types with their GPU destructors.
+	// Intended to be called when program is about to exit.
+	void ClearPoolsGPUMemory();
 } // namespace Resource
 
 template <ResourceType T>

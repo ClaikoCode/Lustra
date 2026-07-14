@@ -1,13 +1,9 @@
 #include "AssetManager.h"
 
-#include "Graphics.h"
-#include "GraphicsUtils.h"
-#include "LustraLib/Assert.h"
+#include "AssetRegistry.h"
 #include "LustraPaths.h"
 #include "Shader.h"
 #include "ShaderCompilerDXC.h"
-
-#include <utility>
 
 namespace
 {
@@ -35,77 +31,14 @@ namespace AssetManager
 
 	void Destroy()
 	{
+		PRINT_LOG("Destroying asset manager...");
+
 		// Destroy shaders
 		{
-			auto& shaderRegistry = GetHandleRegistry<Resource::Shader>();
-
-			for (auto& [id, shaderHandle] : shaderRegistry)
-			{
-				Resource::DestroyShader(shaderHandle);
-
-				shaderHandle.Release();
-			}
-		}
-	}
-
-	void CompileAndBuildShader(AssetID id)
-	{
-		const AssetEntry& assetEntry     = GetEntry(id);
-		Resource::Shader* shaderResource = GetHandle<Resource::Shader>(id).Get();
-		ENSURE(shaderResource != nullptr);
-
-		const auto& shaderMeta = assetEntry.GetMetadata<Metadata::Shader>();
-
-		const ShaderCompilationInfo compInfo = {
-		    .entryPoint  = shaderMeta.entryPoint,
-		    .shaderType  = shaderMeta.shaderType,
-		    .shaderModel = shaderMeta.shaderModel,
-		    .shaderPath  = assetEntry.assetPath,
-		    .defines     = {},
-		};
-
-		const std::vector<std::string> includeDirs = {};
-		bool compSuccessful                        = false;
-		switch (shaderMeta.compiler)
-		{
-			case ShaderCompiler::DXC:
-				compSuccessful = ShaderCompilation::DXC::CompileShader(compInfo, includeDirs, shaderResource->artifact);
-				break;
-
-			default:
-				PRINT_ERROR("Unknown shader compiler type.");
-				CHECK_UNREACHABLE();
+			AssetRegistry::ClearRegistry<Resource::Shader>();
 		}
 
-		ENSURE(compSuccessful);
-
-		// Destroy previous module if it already exists.
-		// This means that the caller has to guarantee that the shader module is not in use before re-creation.
-		if (shaderResource->module != nullptr)
-		{
-			Graphics::gVkDevice.destroyShaderModule(shaderResource->module, Graphics::gAllocationCallbacks);
-		}
-
-		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
-		    .codeSize = shaderResource->artifact.spirvData.size(),
-		    .pCode    = reinterpret_cast<const uint32_t*>(shaderResource->artifact.spirvData.data()),
-		};
-
-		shaderResource->module =
-		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
-	}
-
-	void BuildShadersFromDatabase()
-	{
-		PRINT_DEBUG("Building shaders from database.");
-
-		for (const auto& [id, assetEntry] : gAssetDatabase.GetDB())
-		{
-			if (assetEntry.assetType == AssetType::Shader)
-			{
-				CompileAndBuildShader(id);
-			}
-		}
+		PRINT_LOG("Done.");
 	}
 
 	const AssetEntry& GetEntry(AssetID id)

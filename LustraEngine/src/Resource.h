@@ -128,6 +128,7 @@ struct ResourcePool
 		// Outdated generation, return nullptr
 		if (slot.generation != handle.generation)
 		{
+			PRINT_DEBUG("Outaded slot generation. Returning nullptr.");
 			return nullptr;
 		}
 
@@ -135,7 +136,7 @@ struct ResourcePool
 	}
 
 	// Initial allocation of object (refcount = 1)
-	Handle<T> Allocate(T&& object = {})
+	[[nodiscard]] Handle<T> Allocate(T&& object = {})
 	{
 		ENSURE_EX(
 		    freeEntryHead != kEndIndexSentinel, "Resource pool is full. Make sure you are allocating responsibly."
@@ -213,6 +214,12 @@ namespace Resource
 		static ResourcePool<T> poolInstance;
 
 		return poolInstance;
+	}
+
+	template <ResourceType T>
+	inline Handle<T> Allocate()
+	{
+		return PoolInstance<T>().Allocate();
 	}
 } // namespace Resource
 

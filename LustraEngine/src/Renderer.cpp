@@ -1,10 +1,12 @@
 #include "Renderer.h"
 
 #include "AssetManager.h"
+#include "AssetRegistry.h"
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
 #include "Shader.h"
+#include "ShaderImporter.h"
 
 #include <array>
 #include <chrono>
@@ -22,7 +24,7 @@ namespace
 	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
 	{
 		const auto& shaderMeta         = AssetManager::GetEntry(id).GetMetadata<Metadata::Shader>();
-		const Resource::Shader* shader = AssetManager::GetHandle<Resource::Shader>(id).Get();
+		const Resource::Shader* shader = AssetRegistry::Resolve<Resource::Shader>(id).Get();
 
 		vk::ShaderStageFlagBits shaderStage;
 		switch (shaderMeta.shaderType)
@@ -65,11 +67,6 @@ namespace Renderer
 			gSceneDepth = Resource::Allocate<Resource::DepthTexture>();
 
 			Resource::CreateDepthTexture(gSceneDepth, depthDesc);
-		}
-
-		// Shader objects
-		{
-			AssetManager::BuildShadersFromDatabase();
 		}
 
 		// Graphics pipeline
@@ -209,9 +206,10 @@ namespace Renderer
 
 	void Destroy()
 	{
-		Resource::DestroyDepthTexture(gSceneDepth);
+		// Release all internal resources. Resource pools will clear themselves elsewere.
 		gSceneDepth.Release();
 
+		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gHelloTrianglePipelineLayout, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gTimelineSemaphore, Graphics::gAllocationCallbacks);
@@ -225,7 +223,6 @@ namespace Renderer
 
 	void Render()
 	{
-		// TODO: Move this to Graphics since that should be responsible for this type of check and handling.
 		if (sShouldRecreateSwapchain)
 		{
 			PRINT_LOG("Recreating swapchain...");

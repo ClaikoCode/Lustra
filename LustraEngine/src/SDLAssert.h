@@ -9,7 +9,7 @@
 		const bool result = (SDL_expression);                                                                          \
 		if (result == false)                                                                                           \
 		{                                                                                                              \
-			PRINT_ERROR(message ": {}.", SDL_GetError());                                                              \
+			PRINT_ERROR(message " Reason: {}.", SDL_GetError());                                                       \
 			LUSTRA_ASSERT(result);                                                                                     \
 		}                                                                                                              \
 	} while (false)

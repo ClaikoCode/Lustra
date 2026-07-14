@@ -7,10 +7,15 @@
 #include "Shader.h"
 
 #include <array>
+#include <chrono>
 
 namespace fs = std::filesystem;
+using namespace std::chrono_literals;
+namespace chr = std::chrono;
 
-static constexpr uint64_t kInfiniteWait = UINT64_MAX;
+// Has to be in nanoseconds.
+// This is very helpful to fall back on when the GPU hangs.
+static constexpr uint64_t kMaxSignalWait = chr::nanoseconds(5s).count();
 
 namespace
 {
@@ -112,7 +117,7 @@ namespace Renderer
 
 			// Tell vulkan how color should be written. What should be blended and which channels should be used.
 			const vk::PipelineColorBlendAttachmentState attachState = {
-			    .blendEnable = vk::False, .colorWriteMask = vk::ColorComponentFlags()
+			    .blendEnable = vk::False, .colorWriteMask = vk::FlagTraits<vk::ColorComponentFlagBits>::allFlags
 			};
 
 			// Tell how blending should occurr when writing.
@@ -220,14 +225,26 @@ namespace Renderer
 		// TODO: Move this to Graphics since that should be responsible for this type of check and handling.
 		if (sShouldRecreateSwapchain)
 		{
-			ENSURE(Graphics::gWindowPtr != nullptr);
+			PRINT_LOG("Recreating swapchain...");
 
-			PRINT_LOG("Recreating swapchain.");
+			Graphics::WaitForDevice();
+
+			ENSURE(Graphics::gWindowPtr != nullptr);
 
 			Graphics::gSwapchain.Destroy();
 			Graphics::CreateSwapchain(*Graphics::gWindowPtr);
 
+			// TODO: Make a better way of tracking resources that have any properties bound to the swapchain and make
+			// sure to recreate them along with the swapchain.
+			Resource::DestroyDepthTexture(gSceneDepth);
+			gSceneDepth.Release();
+			gSceneDepth = Resource::CreateDepthTexture(
+			    Graphics::gSwapchain.width, Graphics::gSwapchain.height, vk::Format::eD32Sfloat
+			);
+
 			sShouldRecreateSwapchain = false;
+
+			PRINT_LOG("Done recreating swapchain!");
 		}
 
 		const uint32_t frameResourceIndex = gFrameIndex++ % gMaxFramesInFlight;
@@ -240,7 +257,7 @@ namespace Renderer
 
 		// Force the CPU to wait for the GPU to be done with last session of the same resources that are going to be
 		// worked on THIS frame.
-		AssertVk(Graphics::gVkDevice.waitSemaphores(waitInfo, kInfiniteWait));
+		AssertVk(Graphics::gVkDevice.waitSemaphores(waitInfo, kMaxSignalWait));
 
 		// GPU has signaled that resources are free to use so its time to fetch them and prep for recording commands.
 		const FrameResources& frameResources = gFramesInFlight[frameResourceIndex];
@@ -251,28 +268,44 @@ namespace Renderer
 
 		// Ask the device if it has a swapchain index it knows is going to be available for writes later and bind it
 		// with the semaphore.
-		auto imageAcquireResultValue = Graphics::gVkDevice.acquireNextImageKHR(
-		    Graphics::gSwapchain.swapchain, kInfiniteWait, imageAcquireSemaphore
-		);
+		// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of date
+		// code as an error, stopping the program. Using the C API lets the renderer recover in those cases.
+		uint32_t imageAcquiredIndex        = 0u;
+		const auto imageAcquireResultValue = static_cast<vk::Result>(vkAcquireNextImageKHR(
+		    Graphics::gVkDevice,
+		    Graphics::gSwapchain.swapchain,
+		    kMaxSignalWait,
+		    imageAcquireSemaphore,
+		    VK_NULL_HANDLE,
+		    &imageAcquiredIndex
+		));
 
-		// Image is out of date and swapchain must be recreated.
-		if (imageAcquireResultValue.result == vk::Result::eErrorOutOfDateKHR)
+		if (imageAcquireResultValue == vk::Result::eErrorOutOfDateKHR)
 		{
 			sShouldRecreateSwapchain = true;
+			PRINT_DEBUG(
+			    "Image acquire resulted in '{}'. Asking for swapchain recreation and returning immediately.",
+			    vk::to_string(imageAcquireResultValue)
+			);
 			return;
 		}
 		// Image is suboptimal and swapchain should be recreated but the frame can continue.
-		else if (imageAcquireResultValue.result == vk::Result::eSuboptimalKHR)
+		else if (imageAcquireResultValue == vk::Result::eSuboptimalKHR)
 		{
 			sShouldRecreateSwapchain = true;
+			PRINT_DEBUG(
+			    "Image acquire resulted in '{}'. Asking for swapchain recreation next frame but continuing with the "
+			    "current frame.",
+			    vk::to_string(imageAcquireResultValue)
+			);
 		}
 		else
 		{
 			// If not any of the plausible values above, assert it to check if its an error.
-			AssertVk(imageAcquireResultValue.result);
+			AssertVk(imageAcquireResultValue);
 		}
 
-		const uint32_t imageIndex             = imageAcquireResultValue.value;
+		const uint32_t imageIndex             = imageAcquiredIndex;
 		const vk::CommandBuffer commandBuffer = frameResources.commandBuffer;
 
 		// Render the frame.
@@ -464,7 +497,25 @@ namespace Renderer
 			};
 
 			// Present the swapchain image.
-			AssertVk(graphicsQueue.presentKHR(presentInfo));
+			// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of date
+			// code as an error, stopping the program. Using the C API lets the renderer recover in those cases.
+			const VkPresentInfoKHR& presentInfoC = presentInfo;
+			const auto presentResult = static_cast<vk::Result>(vkQueuePresentKHR(graphicsQueue, &presentInfoC));
+
+			// Because this is the last thing that is done this frame, both suboptimal and out of date are handled NEXT
+			// frame.
+			if (presentResult == vk::Result::eSuboptimalKHR || presentResult == vk::Result::eErrorOutOfDateKHR)
+			{
+				PRINT_DEBUG(
+				    "Present resulted in '{}'. Swapchain will be asked to be recreated the coming frame.",
+				    vk::to_string(presentResult)
+				);
+				sShouldRecreateSwapchain = true;
+			}
+			else
+			{
+				AssertVk(presentResult);
+			}
 		}
 	}
 } // namespace Renderer

@@ -16,7 +16,7 @@ App::App(const char* appName) : m_name(appName)
 {
 	PRINT_DEBUG("Creating App '{}'.", m_name);
 
-	ASSERT_SDL(SDL_Init(SDL_INIT_VIDEO) == true, "Could not init SDL");
+	ASSERT_SDL(SDL_Init(SDL_INIT_VIDEO) == true, "Could not init SDL.");
 	ASSERT_SDL(SDL_Vulkan_LoadLibrary(nullptr) == true, "Could not load Vulkan library.");
 }
 

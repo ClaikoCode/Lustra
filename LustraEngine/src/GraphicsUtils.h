@@ -29,7 +29,11 @@ namespace detail
 		{
 			if (result != vk::Result::eSuccess)
 			{
-				PRINT_DEBUG(
+				LustraLib::Print(
+				    LustraLib::OutputLevelDebug,
+				    loc.file_name(),
+				    loc.function_name(),
+				    loc.line(),
 				    "Vk result '{}' is neither an error or success. Make sure to handle it corectly.",
 				    vk::to_string(result)
 				);

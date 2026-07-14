@@ -23,7 +23,10 @@ namespace Graphics
 	constexpr bool gUseValidationLayers     = USE_VALIDATION_LAYERS;
 
 	constexpr vk::SurfaceFormatKHR gTargetSurfaceFormat = {
-	    .format = vk::Format::eR8G8B8A8Srgb, .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear
+	    // This format is supported essentially everywhere. Shader color writing to to swapchain is not affected by this
+	    // ordering.
+	    .format     = vk::Format::eB8G8R8A8Srgb,
+	    .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear
 	};
 
 	constexpr vk::Format gTargetDepthFormat = vk::Format::eD32Sfloat;

@@ -572,7 +572,7 @@ namespace Graphics
 
 			// Standard presentation modes.
 			const std::vector<vk::PresentModeKHR> requestedPresentationModes = {
-			    vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eMailbox
+			    vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eImmediate
 			};
 
 			for (const vk::PresentModeKHR requestedPresentMode : requestedPresentationModes)
@@ -607,10 +607,14 @@ namespace Graphics
 			const std::vector<vk::SurfaceFormat2KHR> surfaceFormats =
 			    AssertVk(gVkPhysicalDevice.getSurfaceFormats2KHR(physicalDeviceSurfaceInfo));
 
+			PRINT_DEBUG("--- Available surface formats --- ");
+
 			bool foundRequestedSurfaceFormat = false;
 			for (const vk::SurfaceFormat2KHR& availableSurfaceFormat : surfaceFormats)
 			{
 				const vk::SurfaceFormatKHR surfaceFormat = availableSurfaceFormat.surfaceFormat;
+
+				PRINT_DEBUG("{} / {}", vk::to_string(surfaceFormat.format), vk::to_string(surfaceFormat.colorSpace));
 
 				const bool sameFormat     = surfaceFormat.format == gTargetSurfaceFormat.format;
 				const bool sameColorSpace = surfaceFormat.colorSpace == gTargetSurfaceFormat.colorSpace;
@@ -621,6 +625,8 @@ namespace Graphics
 					break;
 				}
 			}
+
+			PRINT_DEBUG("--------------------------------- ");
 
 			ENSURE_EX(
 			    foundRequestedSurfaceFormat,
@@ -664,10 +670,10 @@ namespace Graphics
 		};
 
 		gSwapchain.swapchain = AssertVk(gVkDevice.createSwapchainKHR(swapchainCreateInfo, gAllocationCallbacks));
+		PRINT_LOG("Created swapchain with dimensions: {}x{}.", gSwapchain.width, gSwapchain.height);
 
 		gSwapchain.images                = AssertVk(gVkDevice.getSwapchainImagesKHR(gSwapchain.swapchain));
 		const size_t swapChainImageCount = gSwapchain.images.size();
-
 		gSwapchain.views.resize(swapChainImageCount);
 		for (size_t i = 0; i < swapChainImageCount; i++)
 		{
@@ -694,6 +700,8 @@ namespace Graphics
 
 			semaphore = AssertVk(gVkDevice.createSemaphore(semaphoreInfo, gAllocationCallbacks));
 		}
+
+		PRINT_DEBUG("Swapchain successfully created.");
 	}
 
 	void SetupVMA()
@@ -718,7 +726,9 @@ namespace Graphics
 
 	void WaitForDevice()
 	{
+		PRINT_DEBUG("Waiting for device...");
 		AssertVk(gVkDevice.waitIdle());
+		PRINT_DEBUG("Waiting done!");
 	}
 } // namespace Graphics
 

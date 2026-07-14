@@ -53,7 +53,7 @@
 		{                                                                                                              \
 			if ((expression) == false)                                                                                 \
 			{                                                                                                          \
-				PRINT_ERROR("[CHECK ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                           \
+				PRINT_ERROR("[LUSTRA CHECK ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                    \
 				_DEBUG_TRAP();                                                                                         \
 				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
@@ -76,7 +76,7 @@
 		{                                                                                                              \
 			if ((expression) == false)                                                                                 \
 			{                                                                                                          \
-				PRINT_ERROR("[VALIDATE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                        \
+				PRINT_ERROR("[LUSTRA VALIDATE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                 \
 				_DEBUG_TRAP();                                                                                         \
 				_THREAD_SAFE_EXIT();                                                                                   \
 			}                                                                                                          \
@@ -110,7 +110,7 @@
 	{                                                                                                                  \
 		if ((expression) == false)                                                                                     \
 		{                                                                                                              \
-			PRINT_ERROR("[ENSURE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                              \
+			PRINT_ERROR("[LUSTRA ENSURE ASSERTION FAILED] " message __VA_OPT__(, ) __VA_ARGS__);                       \
 			_DEBUG_TRAP();                                                                                             \
 			_THREAD_SAFE_EXIT();                                                                                       \
 		}                                                                                                              \

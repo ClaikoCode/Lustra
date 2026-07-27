@@ -57,6 +57,14 @@ inline vk::Result AssertVk(vk::Result result, std::source_location loc = std::so
 	return result;
 }
 
+inline vk::Result AssertVk(VkResult result, std::source_location loc = std::source_location::current())
+{
+	const auto castedResult = static_cast<vk::Result>(result);
+
+	detail::AssertVkBase(castedResult, loc);
+	return castedResult;
+}
+
 // =================================
 // 	   Graphics Helper Functions
 // =================================
@@ -71,6 +79,12 @@ namespace GraphicsUtils
 	};
 
 	FeatureNamesInfo GetFeatureNames(vk::StructureType structType);
+
+	// Gives back time in nanoseconds, which is used for device wait timeouts.
+	inline uint64_t TimeoutTime(uint64_t timeInMS)
+	{
+		return timeInMS * 1'000'000u;
+	}
 
 	using FeatureChain = vk::StructureChain<
 	    vk::PhysicalDeviceFeatures2,

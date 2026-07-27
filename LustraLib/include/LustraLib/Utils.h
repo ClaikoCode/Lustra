@@ -19,6 +19,12 @@ namespace Utils
 
 	std::wstring ConvertStringNarrowToWide(const char* narrowString);
 
+	// This classic hash combine is based on the boost library.
+	inline void HashCombine(std::size_t& seed, std::size_t value)
+	{
+		seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+	}
+
 	template <typename T>
 	// Gets the typename as a string at compile time.
 	// NOTE: In MSVC, the string that is parsed includes this function's name. If the func name changes, the string also

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Handle.h"
 #include "LustraVulkan.h"
-#include "Resource.h"
 #include "ShaderCompilerShared.h"
 
 #include <string>

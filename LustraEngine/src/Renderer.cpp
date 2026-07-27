@@ -5,6 +5,8 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
+#include "Model.h"
+#include "ModelImporter.h"
 #include "Shader.h"
 #include "ShaderImporter.h"
 
@@ -50,6 +52,28 @@ namespace
 		return info;
 	}
 
+	vk::PipelineVertexInputStateCreateInfo CreateVertexInputStateDefault()
+	{
+		// Describe how vertices are going to be bound.
+		static const vk::VertexInputBindingDescription bindingDesc = {
+		    .binding = 0, .stride = sizeof(Resource::Vertex), .inputRate = vk::VertexInputRate::eVertex
+		};
+
+		static std::array<vk::VertexInputAttributeDescription, 5> attrs{};
+		attrs[0] = {0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Resource::Vertex, pos)};        // vec3
+		attrs[1] = {1, 0, vk::Format::eR32G32Sfloat, offsetof(Resource::Vertex, uv)};            // vec2
+		attrs[2] = {2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Resource::Vertex, normal)};     // vec3
+		attrs[3] = {3, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(Resource::Vertex, tangent)}; // vec4
+		attrs[4] = {4, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(Resource::Vertex, col)};     // vec4
+
+		// Describe how vertices are layed out in memory and in what primitives they describe.
+		vk::PipelineVertexInputStateCreateInfo vertInputInfo = {};
+		vertInputInfo.setVertexBindingDescriptions(bindingDesc);
+		vertInputInfo.setVertexAttributeDescriptions(attrs);
+
+		return vertInputInfo;
+	}
+
 	bool sShouldRecreateSwapchain = false;
 	uint64_t sNextSignalValue     = Renderer::gMaxFramesInFlight + 1;
 
@@ -69,19 +93,71 @@ namespace Renderer
 			Resource::CreateDepthTexture(gSceneDepth, depthDesc);
 		}
 
+		// Per frame resources
+		{
+			for (FrameResources& frameResources : gFramesInFlight)
+			{
+				const vk::CommandPoolCreateInfo commandPoolInfo = {.queueFamilyIndex = Graphics::graphicsQueue.index};
+				frameResources.commandPool =
+				    AssertVk(Graphics::gVkDevice.createCommandPool(commandPoolInfo, Graphics::gAllocationCallbacks));
+
+				const vk::CommandBufferAllocateInfo commandAllocInfo = {
+				    .commandPool        = frameResources.commandPool,
+				    .level              = vk::CommandBufferLevel::ePrimary,
+				    .commandBufferCount = 1
+				};
+
+				frameResources.commandBuffer =
+				    AssertVk(Graphics::gVkDevice.allocateCommandBuffers(commandAllocInfo))[0];
+
+				frameResources.frameConstantsBuffer = CreateBuffer(
+				    sizeof(FrameConstants),
+				    vk::BufferUsageFlagBits::eUniformBuffer,
+				    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
+				);
+
+				frameResources.instanceTransformBuffer = CreateBuffer(
+				    gMaxMeshes * sizeof(InstanceData),
+				    vk::BufferUsageFlagBits::eStorageBuffer,
+				    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
+				);
+			}
+		}
+
+		// Descriptor pool
+		{
+			const std::array<vk::DescriptorPoolSize, 2> poolSizes{
+			    vk::DescriptorPoolSize{
+			        .type            = vk::DescriptorType::eStorageBuffer,
+			        .descriptorCount = gMaxFramesInFlight,
+			    },
+			    vk::DescriptorPoolSize{
+			        .type            = vk::DescriptorType::eUniformBuffer,
+			        .descriptorCount = gMaxFramesInFlight,
+			    }
+			};
+
+			vk::DescriptorPoolCreateInfo poolInfo = {};
+			poolInfo.setPoolSizes(poolSizes);
+			poolInfo.setMaxSets(gMaxFramesInFlight); // One set per frame
+
+			gStaticDescriptorPool =
+			    AssertVk(Graphics::gVkDevice.createDescriptorPool(poolInfo, Graphics::gAllocationCallbacks));
+		}
+
 		// Graphics pipeline
 		{
-			const vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {.setLayoutCount = 0, .pushConstantRangeCount = 0};
+			vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {.setLayoutCount = 0, .pushConstantRangeCount = 0};
 
 			gHelloTrianglePipelineLayout =
 			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
 
-			const std::array shaderStages = {
+			std::array shaderStages = {
 			    ::CreateShaderStageInfo(AssetKeyShaderVSTest), ::CreateShaderStageInfo(AssetKeyShaderFSTest)
 			};
 
-			// Describe how vertices are layed out in memory and in what primitives they describe.
-			const vk::PipelineVertexInputStateCreateInfo vertInputInfo       = {};
+			vk::PipelineVertexInputStateCreateInfo vertInputInfo = ::CreateVertexInputStateDefault();
+
 			const vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
 			    .topology = vk::PrimitiveTopology::eTriangleList
 			};
@@ -139,7 +215,7 @@ namespace Renderer
 			};
 
 			// Bring it all together to create the actual pipeline object.
-			const vk::GraphicsPipelineCreateInfo pipelineInfo = {
+			vk::GraphicsPipelineCreateInfo pipelineInfo = {
 			    .pNext               = &renderInfo,
 			    .stageCount          = shaderStages.size(),
 			    .pStages             = shaderStages.data(),
@@ -156,6 +232,111 @@ namespace Renderer
 			};
 
 			gHelloTrianglePipeline = AssertVk(
+			    Graphics::gVkDevice.createGraphicsPipeline(nullptr, pipelineInfo, Graphics::gAllocationCallbacks)
+			);
+
+			// This has to equal the bindings on the shader side.
+			std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
+			    // Frame constants
+			    vk::DescriptorSetLayoutBinding{
+			        .binding         = 0,
+			        .descriptorType  = vk::DescriptorType::eUniformBuffer,
+			        .descriptorCount = 1,
+			        .stageFlags      = vk::ShaderStageFlagBits::eVertex,
+			    },
+
+			    // Transforms
+			    vk::DescriptorSetLayoutBinding{
+			        .binding         = 1,
+			        .descriptorType  = vk::DescriptorType::eStorageBuffer,
+			        .descriptorCount = 1,
+			        .stageFlags      = vk::ShaderStageFlagBits::eVertex,
+			    },
+			};
+
+			vk::DescriptorSetLayoutCreateInfo descSetLayoutInfo = {};
+			descSetLayoutInfo.setBindings(bindings);
+
+			gStaticDescriptorsLayout = AssertVk(
+			    Graphics::gVkDevice.createDescriptorSetLayout(descSetLayoutInfo, Graphics::gAllocationCallbacks)
+			);
+
+			// Allocate and write descriptor sets
+			{
+				std::array<vk::DescriptorSetLayout, gMaxFramesInFlight> layouts = {};
+				layouts.fill(gStaticDescriptorsLayout); // Same layout for each set to be allocated.
+
+				vk::DescriptorSetAllocateInfo setAllocInfo = {};
+				setAllocInfo.setDescriptorPool(gStaticDescriptorPool);
+				setAllocInfo.setDescriptorSetCount(gMaxFramesInFlight);
+				setAllocInfo.setSetLayouts(layouts);
+
+				std::vector<vk::DescriptorSet> sets =
+				    AssertVk(Graphics::gVkDevice.allocateDescriptorSets(setAllocInfo));
+
+				// Bind descriptor sets with buffer descriptors per frame.
+				for (uint32_t i = 0; i < gMaxFramesInFlight; i++)
+				{
+					FrameResources& frame      = gFramesInFlight[i];
+					frame.agnosticConstantsSet = sets[i];
+
+					const vk::DescriptorBufferInfo uboInfo = {
+					    .buffer = frame.frameConstantsBuffer.buffer, .offset = 0, .range = sizeof(FrameConstants)
+					};
+
+					const vk::DescriptorBufferInfo ssboInfo = {
+					    .buffer = frame.instanceTransformBuffer.buffer, .offset = 0, .range = vk::WholeSize
+					};
+
+					const std::array<vk::WriteDescriptorSet, 2> writes = {
+					    vk::WriteDescriptorSet{
+					        .dstSet          = frame.agnosticConstantsSet,
+					        .dstBinding      = 0,
+					        .dstArrayElement = 0,
+					        .descriptorCount = 1,
+					        .descriptorType  = vk::DescriptorType::eUniformBuffer,
+					        .pBufferInfo     = &uboInfo,
+					    },
+
+					    vk::WriteDescriptorSet{
+					        .dstSet          = frame.agnosticConstantsSet,
+					        .dstBinding      = 1,
+					        .dstArrayElement = 0,
+					        .descriptorCount = 1,
+					        .descriptorType  = vk::DescriptorType::eStorageBuffer,
+					        .pBufferInfo     = &ssboInfo,
+					    },
+					};
+
+					Graphics::gVkDevice.updateDescriptorSets(writes, {});
+				}
+			}
+
+			const vk::PushConstantRange pcRange = {
+			    .stageFlags = vk::ShaderStageFlagBits::eVertex,
+			    .offset     = 0,
+			    .size       = sizeof(uint32_t) // Must be a multiple of 4
+			};
+
+			// This order must match the set indices inside shaders layout(set = i).
+			const std::array setLayouts = {gStaticDescriptorsLayout};
+
+			pipelineLayoutInfo = {};
+			pipelineLayoutInfo.setSetLayouts(setLayouts);
+			pipelineLayoutInfo.setPushConstantRanges(pcRange);
+
+			gModelTestPipelineLayout =
+			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
+
+			shaderStages = {
+			    ::CreateShaderStageInfo(AssetKeyShaderFSModelTest), ::CreateShaderStageInfo(AssetKeyShaderVSModelTest)
+			};
+
+			// Keep all other pipeline defaults but these.
+			pipelineInfo.setStages(shaderStages);
+			pipelineInfo.setLayout(gModelTestPipelineLayout);
+
+			gModelTestPipeline = AssertVk(
 			    Graphics::gVkDevice.createGraphicsPipeline(nullptr, pipelineInfo, Graphics::gAllocationCallbacks)
 			);
 		}
@@ -183,25 +364,6 @@ namespace Renderer
 				    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
 			}
 		}
-
-		// Command buffers
-		{
-			for (FrameResources& frameResources : gFramesInFlight)
-			{
-				const vk::CommandPoolCreateInfo commandPoolInfo = {.queueFamilyIndex = Graphics::graphicsQueue.index};
-				frameResources.commandPool =
-				    AssertVk(Graphics::gVkDevice.createCommandPool(commandPoolInfo, Graphics::gAllocationCallbacks));
-
-				const vk::CommandBufferAllocateInfo commandAllocInfo = {
-				    .commandPool        = frameResources.commandPool,
-				    .level              = vk::CommandBufferLevel::ePrimary,
-				    .commandBufferCount = 1
-				};
-
-				frameResources.commandBuffer =
-				    AssertVk(Graphics::gVkDevice.allocateCommandBuffers(commandAllocInfo))[0];
-			}
-		}
 	} // namespace Renderer
 
 	void Destroy()
@@ -212,17 +374,39 @@ namespace Renderer
 		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gHelloTrianglePipelineLayout, Graphics::gAllocationCallbacks);
+
+		Graphics::gVkDevice.destroy(gModelTestPipeline, Graphics::gAllocationCallbacks);
+		Graphics::gVkDevice.destroy(gModelTestPipelineLayout, Graphics::gAllocationCallbacks);
+		Graphics::gVkDevice.destroy(gStaticDescriptorsLayout, Graphics::gAllocationCallbacks);
+
+		// Also takes care of all allocated descriptor sets.
+		Graphics::gVkDevice.destroy(gStaticDescriptorPool);
+
 		Graphics::gVkDevice.destroy(gTimelineSemaphore, Graphics::gAllocationCallbacks);
 
-		for (const FrameResources& frameResources : gFramesInFlight)
+		for (FrameResources& frameResources : gFramesInFlight)
 		{
 			Graphics::gVkDevice.destroy(frameResources.commandPool, Graphics::gAllocationCallbacks);
 			Graphics::gVkDevice.destroy(frameResources.imageAcquiredSemaphore, Graphics::gAllocationCallbacks);
+
+			DestroyBuffer(frameResources.frameConstantsBuffer);
+			DestroyBuffer(frameResources.instanceTransformBuffer);
 		}
 	}
 
 	void Render()
 	{
+		// Process draw calls
+		// TODO: Move to some Update() function.
+		std::vector<ModelInstance> modelInstances = {};
+		{
+			Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
+			modelInstances.push_back({
+			    .modelHandle = modelTest,
+			    .worldMatrix = glm::mat4(1.0f),
+			});
+		}
+
 		if (sShouldRecreateSwapchain)
 		{
 			PRINT_LOG("Recreating swapchain...");
@@ -255,8 +439,73 @@ namespace Renderer
 		// worked on THIS frame.
 		AssertVk(Graphics::gVkDevice.waitSemaphores(waitInfo, kMaxSignalWait));
 
-		// GPU has signaled that resources are free to use so its time to fetch them and prep for recording commands.
+		// GPU has signaled that resources are free to use so its time to fetch them.
 		const FrameResources& frameResources = gFramesInFlight[frameResourceIndex];
+
+		static const auto startTime = std::chrono::steady_clock::now();
+		const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
+
+		// Write frame CPU data to GPU buffers.
+		{
+			// Write transform data.
+			{
+				InstanceData* const instanceDataArray =
+				    reinterpret_cast<InstanceData*>(frameResources.instanceTransformBuffer.info.pMappedData);
+				uint32_t transformIndex = 0u;
+				for (const ModelInstance& modelInstance : modelInstances)
+				{
+					const Resource::Model& model = *modelInstance.modelHandle.Get();
+					for (const Resource::MeshInstance& meshInstance : model.instances)
+					{
+						instanceDataArray[transformIndex].transform =
+						    modelInstance.worldMatrix * meshInstance.transform;
+
+						// Increment for each mesh transform copied.
+						transformIndex++;
+					}
+				}
+
+				// Flush
+				vmaFlushAllocation(
+				    Graphics::gVmaAllocator, frameResources.instanceTransformBuffer.alloc, 0, VK_WHOLE_SIZE
+				);
+			}
+
+			// Write frame constant data.
+			{
+				FrameConstants fc = {};
+
+				const float angle  = t * glm::radians(45.0f); // 45 deg/sec orbit
+				const float radius = 5.0f;                    // distance from the model
+
+				// A camera sitting back on + Z, looking at the origin.
+				const glm::vec3 eye = {
+				    radius * std::sin(angle),
+				    0.0f,
+				    radius * std::cos(angle),
+				};
+				const glm::vec3 center = {0.0f, 0.0f, 0.0f};
+				const glm::vec3 up     = {0.0f, 1.0f, 0.0f};
+				fc.view                = glm::lookAt(eye, center, up);
+
+				const float aspect =
+				    static_cast<float>(Graphics::gSwapchain.width) / static_cast<float>(Graphics::gSwapchain.height);
+				fc.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+
+				// Reverse Y since GLM assumes OpenGL standard which has NDC +Y as up when Vulkan assumes +Y as down.
+				fc.proj[1][1] *= -1.0f;
+
+				// Copy over the data.
+				memcpy(frameResources.frameConstantsBuffer.info.pMappedData, &fc, sizeof(fc));
+
+				// Flush
+				vmaFlushAllocation(
+				    Graphics::gVmaAllocator, frameResources.frameConstantsBuffer.alloc, 0, VK_WHOLE_SIZE
+				);
+			}
+		}
+
+		// Prep for recording new commands.
 		AssertVk(Graphics::gVkDevice.resetCommandPool(frameResources.commandPool));
 
 		// This semaphore will be used to check if the image we are going to be rendering to later is free to write to.
@@ -359,7 +608,7 @@ namespace Renderer
 			};
 			commandBuffer.pipelineBarrier2(depInfo);
 
-			constexpr std::array clearColor                   = {0.01f, 0.01f, 0.01f, 1.0f};
+			constexpr std::array clearColor                   = {0.0f, 0.0f, 0.0f, 1.0f};
 			const vk::RenderingAttachmentInfo colorAttachInfo = {
 			    .imageView   = swapchainView,
 			    .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
@@ -391,17 +640,61 @@ namespace Renderer
 
 			{
 				const vk::Viewport viewport = {
-				    .x = 0, .y = 0, .width = static_cast<float>(targetWidth), .height = static_cast<float>(targetHeight)
+				    .x        = 0,
+				    .y        = 0,
+				    .width    = static_cast<float>(targetWidth),
+				    .height   = static_cast<float>(targetHeight),
+				    .minDepth = 0.0f,
+				    .maxDepth = 1.0f
 				};
 				commandBuffer.setViewport(0, 1, &viewport);
 
 				const vk::Rect2D scissor = {
-				    .offset = {.x = 0, .y = 0}, .extent = {.width = targetWidth, .height = targetHeight}
+				    .offset = {.x = 0, .y = 0},
+				    .extent = {.width = targetWidth, .height = targetHeight},
 				};
 				commandBuffer.setScissor(0, 1, &scissor);
 
-				commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, gHelloTrianglePipeline);
-				commandBuffer.draw(3, 1, 0, 0);
+				commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, gModelTestPipeline);
+
+				const vk::PipelineLayout currentLayout = gModelTestPipelineLayout;
+				commandBuffer.bindDescriptorSets(
+				    vk::PipelineBindPoint::eGraphics, currentLayout, 0, frameResources.agnosticConstantsSet, {}
+				);
+
+				uint32_t baseTransformIndex = 0;
+				for (const ModelInstance& modelInstance : modelInstances)
+				{
+					const Resource::Model& model = *modelInstance.modelHandle.Get();
+
+					// Bind geometry buffers per model.
+					commandBuffer.bindVertexBuffers(0, model.geomSource.gpuMesh.vertexBuffer.buffer, {0});
+					commandBuffer.bindIndexBuffer(
+					    model.geomSource.gpuMesh.indexBuffer.buffer, 0, vk::IndexType::eUint32
+					);
+
+					// Go through all mesh instances.
+					for (uint32_t i = 0; i < model.instances.size(); i++)
+					{
+						const uint32_t transformIndex = baseTransformIndex = i;
+						// Push the transform index per mesh instance.
+						commandBuffer.pushConstants<uint32_t>(
+						    currentLayout, vk::ShaderStageFlagBits::eVertex, 0, transformIndex
+						);
+
+						for (const Resource::SubMesh& submesh : model.instances[i].subMeshes)
+						{
+							const Resource::PrimitiveRange& range = submesh.range;
+
+							// TODO: Push material index?
+
+							commandBuffer.drawIndexed(range.indexCount, 1, range.startIndex, range.vertexOffset, 0);
+						}
+					}
+
+					// Increase base index.
+					baseTransformIndex += model.instances.size();
+				}
 			}
 
 			commandBuffer.endRendering();
@@ -439,26 +732,28 @@ namespace Renderer
 			const vk::Queue graphicsQueue                  = Graphics::graphicsQueue.queue;
 
 			// We have the index for which swapchain image we are going to write to but now we have to wait for the
-			// image at that index to actually be available. This semaphore is tied to the swapchain image so as soon as
-			// the image at the index that was given to prior can be written to, a signal is sent.
-			// NOTE: This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
+			// image at that index to actually be available. This semaphore is tied to the swapchain image so as
+			// soon as the image at the index that was given to prior can be written to, a signal is sent. NOTE:
+			// This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
 			// semaphore to be signaled at the point of trying to bind the image for color output in the pipeline.
 			// Earlier pipeline stages are free to run.
-			// TODO: Work should be split into different command buffers because this wait waits on the FIRST instance
-			// of color output attachement, even if the target is not the swapchain. This wait should only be for the
-			// command buffer that has commands that will write to the swapchain, all other kind of work should be
-			// separate to avoid unecessary GPU stalls.
+			// TODO: Work should be split into different command buffers because this wait waits on the FIRST
+			// instance of color output attachement, even if the target is not the swapchain. This wait should only
+			// be for the command buffer that has commands that will write to the swapchain, all other kind of work
+			// should be separate to avoid unecessary GPU stalls.
 			const vk::SemaphoreSubmitInfo imageAcquiredWaitInfo = {
 			    .semaphore = imageAcquireSemaphore, .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput
 			};
 
 			const std::array semaphoreSignals = {
-			    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once all
+			    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once
+			    // all
 			    // GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
 			    vk::SemaphoreSubmitInfo{
 			        .semaphore = renderingCompleteSemaphore, .stageMask = vk::PipelineStageFlagBits2::eAllGraphics
 			    },
-			    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames signal
+			    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames
+			    // signal
 			    // value to finally communicate that all resources associated with this frame has been completed.
 			    vk::SemaphoreSubmitInfo{
 			        .semaphore = gTimelineSemaphore,
@@ -493,13 +788,14 @@ namespace Renderer
 			};
 
 			// Present the swapchain image.
-			// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of date
-			// code as an error, stopping the program. Using the C API lets the renderer recover in those cases.
+			// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of
+			// date code as an error, stopping the program. Using the C API lets the renderer recover in those
+			// cases.
 			const VkPresentInfoKHR& presentInfoC = presentInfo;
 			const auto presentResult = static_cast<vk::Result>(vkQueuePresentKHR(graphicsQueue, &presentInfoC));
 
-			// Because this is the last thing that is done this frame, both suboptimal and out of date are handled NEXT
-			// frame.
+			// Because this is the last thing that is done this frame, both suboptimal and out of date are handled
+			// NEXT frame.
 			if (presentResult == vk::Result::eSuboptimalKHR || presentResult == vk::Result::eErrorOutOfDateKHR)
 			{
 				PRINT_DEBUG(

@@ -54,6 +54,7 @@ namespace Graphics
 			return swapchain;
 		}
 	};
+
 } // namespace Graphics
 
 namespace Graphics
@@ -78,6 +79,9 @@ namespace Graphics
 	// VMA
 	inline VmaAllocator gVmaAllocator = {};
 
+	// Transfer command pool, bound to device lifetime.
+	inline vk::CommandPool gTransferPool = {};
+
 	// TODO: Find a better way to solve this.
 	inline const Window* gWindowPtr = nullptr;
 
@@ -88,8 +92,8 @@ namespace Graphics
 	void SetupInstance(
 	    const vk::ApplicationInfo& vkApplicationInfo, const std::vector<const char*>& externalRequestedExtensions
 	);
-	void SetupDevice();
 	void SetupDebugMessenger();
+	void SetupDevice();
 	void SetupVMA();
 	void SetupSurface(const Window& window);
 	void CreateSwapchain(const Window& window);

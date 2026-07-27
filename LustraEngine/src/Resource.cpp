@@ -1,6 +1,7 @@
 #include "Resource.h"
 
 #include "LustraLib/Logger.h"
+#include "Model.h"
 #include "Shader.h"
 #include "Texture.h"
 
@@ -12,6 +13,7 @@ namespace Resource
 
 		PoolInstance<Shader>().DestroyObjectsGPUMemory(&DestroyShader);
 		PoolInstance<DepthTexture>().DestroyObjectsGPUMemory(&DestroyDepthTexture);
+		PoolInstance<Model>().DestroyObjectsGPUMemory(&DestroyModel);
 
 		PRINT_LOG("Done.");
 	}

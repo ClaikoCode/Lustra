@@ -1,5 +1,7 @@
 #pragma once
 
+#include "AssetEntry.h"
+#include "LustraLib/Logger.h"
 #include "LustraVulkan.h"
 #include "ShaderCompilerShared.h"
 
@@ -28,18 +30,12 @@ using AssetID = UUID;
 // Want implicit casting to UUID.
 enum AssetKey : UUID
 {
-	AssetKeyUnknown      = 0,
-	AssetKeyShaderVSTest = 14552202811960402000u,
-	AssetKeyShaderFSTest = 8105587591145421000u,
-};
-
-enum class AssetType : uint8_t
-{
-	Unknown = 0,
-	Shader,
-	Model,
-	Texture,
-	Material
+	AssetKeyUnknown           = 0,
+	AssetKeyShaderVSTest      = 14552202811960402000u,
+	AssetKeyShaderFSTest      = 8105587591145421000u,
+	AssetKeyModelTest         = 6005506655734169000u,
+	AssetKeyShaderVSModelTest = 11576320714956073000u,
+	AssetKeyShaderFSModelTest = 15866899531044698000u,
 };
 
 namespace Metadata
@@ -55,39 +51,24 @@ namespace Metadata
 		ShaderModel shaderModel = ShaderModelLatest;
 		std::string entryPoint  = "main";
 	};
-} // namespace Metadata
 
-using MetadataPtr = std::unique_ptr<void, void (*)(void*)>;
-
-template <typename T, typename... Args>
-// By default, unique ptr doesn't store the underlying type when constructed so it cant create a void version.
-// This function solves this by producing a unique ptr that has information on how to delete the object it stores.
-MetadataPtr make_metadata_ptr(Args&&... args)
-{
-	return MetadataPtr(new T(std::forward<Args>(args)...), [](void* p) { delete static_cast<T*>(p); });
-}
-
-// An entry into the asset database.
-// Should only hold the information enough to load as a runtime resource and put into resource pools.
-struct AssetEntry
-{
-	AssetType assetType = AssetType::Unknown;
-	std::filesystem::path assetPath;
-	MetadataPtr assetMetadata; // Metadata defined from the asset type
-
-	template <typename Meta>
-	// Helper function to cast to correct metadata type.
-	const Meta& GetMetadata() const
+	struct Model
 	{
-		return *static_cast<const Meta*>(assetMetadata.get());
-	}
-};
+		bool useSkeleton = false;
+		bool useMats     = false;
+	};
+} // namespace Metadata
 
 class AssetDatabase
 {
   public:
 	void AddEntry(AssetID id, AssetType assetType, std::filesystem::path assetPath, MetadataPtr&& metaptr)
 	{
+		if (db.contains(id))
+		{
+			PRINT_WARNING("Overwriting asset with '{}'.", id);
+		}
+
 		db.emplace(
 		    id,
 		    AssetEntry{.assetType = assetType, .assetPath = std::move(assetPath), .assetMetadata = std::move(metaptr)}
@@ -101,6 +82,16 @@ class AssetDatabase
 		    AssetType::Shader,
 		    std::move(shaderPath),
 		    make_metadata_ptr<Metadata::Shader>(std::move(shaderMetadata))
+		);
+	}
+
+	void AddModel(AssetID modelID, std::filesystem::path modelPath, Metadata::Model&& modelMetadata)
+	{
+		AddEntry(
+		    modelID,
+		    AssetType::Model,
+		    std::move(modelPath),
+		    make_metadata_ptr<Metadata::Model>(std::move(modelMetadata))
 		);
 	}
 

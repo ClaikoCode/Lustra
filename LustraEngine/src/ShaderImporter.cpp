@@ -1,5 +1,6 @@
 #include "ShaderImporter.h"
 
+#include "AssetManager.h"
 #include "Resource.h"
 #include "Shader.h"
 #include "ShaderCompilerShared.h"

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "AssetEntry.h"
 #include "AssetImporter.h"
-#include "AssetManager.h"
 #include "Shader.h"
 
 template <>

@@ -16,6 +16,8 @@ add_library(stb-image INTERFACE)
 target_include_directories(stb-image SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/stb")
 
 add_library(tinygltf INTERFACE)
+set(TINYGLTF_NOEXCEPTION ON CACHE BOOL "" FORCE)
+target_compile_definitions(tinygltf INTERFACE TINYGLTF3_ENABLE_FS)
 target_include_directories(tinygltf SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/tinygltf")
 
 # ==========================================
@@ -24,9 +26,9 @@ target_include_directories(tinygltf SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR
 
 # Disable warnings for third-party code only for vendor library cmake directories.
 if(MSVC)
-    add_compile_options(/W0)
+	add_compile_options(/W0)
 else()
-    add_compile_options(-w)
+	add_compile_options(-w)
 endif()
 
 set(SDL_SHARED          OFF CACHE BOOL "" FORCE)

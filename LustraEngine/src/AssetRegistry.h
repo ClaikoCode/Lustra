@@ -2,6 +2,7 @@
 
 #include "AssetImporter.h"
 #include "AssetManager.h"
+#include "Handle.h"
 #include "LustraLib/Logger.h"
 #include "LustraLib/Utils.h"
 #include "Resource.h"

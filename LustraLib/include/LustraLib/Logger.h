@@ -85,6 +85,8 @@ namespace LustraLib
 	LustraLib::Print(LustraLib::OutputLevelWarning, __FILE__, __func__, __LINE__, message __VA_OPT__(,) __VA_ARGS__)
 #define PRINT_ERROR(message, ...)                                                                                      \
 	LustraLib::Print(LustraLib::OutputLevelError, __FILE__, __func__, __LINE__, message __VA_OPT__(,) __VA_ARGS__)
+#define PRINT_CUSTOM(level, message, ...)                                                                              \
+	LustraLib::Print(level, __FILE__, __func__, __LINE__, message __VA_OPT__(,) __VA_ARGS__)
 // clang-format on
 
 #define LOGGER_DISABLE_LOCATION()                                                                                      \

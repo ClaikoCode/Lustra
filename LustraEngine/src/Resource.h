@@ -1,23 +1,12 @@
 #pragma once
 
+#include "Handle.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
 #include "LustraVulkan.h"
-#include "ResourceTag.h"
 #include "vma/vk_mem_alloc.h"
 
 #include <functional>
-
-template <ResourceType T>
-struct Handle // Lightweight versioned resource handle
-{
-	uint32_t index;
-	uint32_t generation;
-
-	T* Get();
-	const T* Get() const;
-	void Release();
-};
 
 template <ResourceType T>
 struct ResourcePool

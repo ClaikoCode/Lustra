@@ -8,6 +8,7 @@ Checks: |
   -bugprone-narrowing-conversions,
 
   performance-*,
+  -performance-move-const-arg,
 
   modernize-*,
   -modernize-use-trailing-return-type,

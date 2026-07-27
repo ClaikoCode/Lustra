@@ -15,9 +15,6 @@
 // Single global default dispatcher storage. Should only pertain to a single TU.
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
-// Homeless resources
-// TODO: Move to separate files later
-
 namespace
 {
 	// Should return bool that tells if the callback should be aborted. However, returning true is usually only for
@@ -176,6 +173,8 @@ namespace Graphics
 	void TearDownVulkan()
 	{
 		PRINT_DEBUG("Tearing down Vulkan.");
+
+		gVkDevice.destroyCommandPool(gTransferPool, gAllocationCallbacks);
 
 		if constexpr (gUseValidationLayers)
 		{
@@ -338,7 +337,9 @@ namespace Graphics
 
 		GraphicsUtils::FeatureChain requestedFeatureChain = {};
 
-		requestedFeatureChain.get<vk::PhysicalDeviceVulkan12Features>().setTimelineSemaphore(VK_TRUE);
+		requestedFeatureChain.get<vk::PhysicalDeviceVulkan12Features>()
+		    .setTimelineSemaphore(VK_TRUE)
+		    .setBufferDeviceAddress(VK_TRUE);
 
 		requestedFeatureChain.get<vk::PhysicalDeviceVulkan13Features>()
 		    .setSynchronization2(VK_TRUE)
@@ -524,6 +525,17 @@ namespace Graphics
 		graphicsQueue.queue = gVkDevice.getQueue(graphicsQueue.index, 0);
 		computeQueue.queue  = gVkDevice.getQueue(computeQueue.index, 0);
 		transferQueue.queue = gVkDevice.getQueue(transferQueue.index, 0);
+
+		// Create transfer pool
+		{
+			const vk::CommandPoolCreateInfo transferPoolInfo = {
+			    .flags = vk::CommandPoolCreateFlagBits::eTransient, // Will only create command buffers during copy
+			                                                        // calls. Shortlived.
+			    .queueFamilyIndex = transferQueue.index,
+			};
+
+			gTransferPool = AssertVk(gVkDevice.createCommandPool(transferPoolInfo, gAllocationCallbacks));
+		}
 	}
 
 	void SetupDebugMessenger()
@@ -713,13 +725,14 @@ namespace Graphics
 		vmaFuncInfo.vkGetDeviceProcAddr   = dispatcher.vkGetDeviceProcAddr;
 
 		VmaAllocatorCreateInfo vmaAllocInfo = {};
-		vmaAllocInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-		vmaAllocInfo.physicalDevice         = gVkPhysicalDevice;
-		vmaAllocInfo.device                 = gVkDevice;
-		vmaAllocInfo.pVulkanFunctions       = &vmaFuncInfo;
-		vmaAllocInfo.instance               = gVkInstance;
-		vmaAllocInfo.vulkanApiVersion       = gTargetVulkanVersion;
-		vmaAllocInfo.pAllocationCallbacks   = reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks);
+		// Requires 1.2 feature to be enabled.
+		vmaAllocInfo.flags                = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+		vmaAllocInfo.physicalDevice       = gVkPhysicalDevice;
+		vmaAllocInfo.device               = gVkDevice;
+		vmaAllocInfo.pVulkanFunctions     = &vmaFuncInfo;
+		vmaAllocInfo.instance             = gVkInstance;
+		vmaAllocInfo.vulkanApiVersion     = gTargetVulkanVersion;
+		vmaAllocInfo.pAllocationCallbacks = reinterpret_cast<const VkAllocationCallbacks*>(gAllocationCallbacks);
 
 		AssertVk(static_cast<vk::Result>(vmaCreateAllocator(&vmaAllocInfo, &gVmaAllocator)));
 	}
@@ -730,6 +743,7 @@ namespace Graphics
 		AssertVk(gVkDevice.waitIdle());
 		PRINT_DEBUG("Waiting done!");
 	}
+
 } // namespace Graphics
 
 // Struct definitions

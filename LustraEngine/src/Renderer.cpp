@@ -678,7 +678,7 @@ namespace Renderer
 					// Go through all mesh instances.
 					for (uint32_t i = 0; i < model.instances.size(); i++)
 					{
-						const uint32_t transformIndex = baseTransformIndex = i;
+						const uint32_t transformIndex = baseTransformIndex + i;
 						// Push the transform index per mesh instance.
 						commandBuffer.pushConstants<uint32_t>(
 						    currentLayout, vk::ShaderStageFlagBits::eVertex, 0, transformIndex

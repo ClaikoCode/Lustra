@@ -8,6 +8,8 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "tinygltf/tiny_gltf_v3.h"
 
+#include <numbers>
+
 using Resource::Model;
 
 constexpr std::string_view kNotYetSupportedHeader = "[LUSTRA NOT YET SUPPORTED]";
@@ -370,6 +372,64 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 	return ProcessModel(statics, 0, parentMatrix);
 }
 
+// Will increment ref counter as the caller is now responsible for ensuring that it also has a release-path.
+[[nodiscard]] Handle<Model> GetFallbackModelOwnership()
+{
+	static bool sModelHasBeenCreated   = false;
+	static Handle<Model> fallbackModel = {};
+
+	if (!sModelHasBeenCreated)
+	{
+		constexpr float n           = std::numbers::inv_sqrt3_v<float>; // 1/sqrt(3)
+		constexpr glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
+
+		std::vector<Resource::Vertex> vertices = {
+		    {{-0.5f, -0.5f, 0.5f}, {}, {-n, -n, n}, {}, magenta},   // 0
+		    {{0.5f, -0.5f, 0.5f}, {}, {n, -n, n}, {}, magenta},     // 1
+		    {{-0.5f, 0.5f, 0.5f}, {}, {-n, n, n}, {}, magenta},     // 2
+		    {{0.5f, 0.5f, 0.5f}, {}, {n, n, n}, {}, magenta},       // 3
+		    {{-0.5f, -0.5f, -0.5f}, {}, {-n, -n, -n}, {}, magenta}, // 4
+		    {{0.5f, -0.5f, -0.5f}, {}, {n, -n, -n}, {}, magenta},   // 5
+		    {{-0.5f, 0.5f, -0.5f}, {}, {-n, n, -n}, {}, magenta},   // 6
+		    {{0.5f, 0.5f, -0.5f}, {}, {n, n, -n}, {}, magenta},     // 7
+		};
+
+		std::vector<uint32_t> indices = {
+		    0, 1, 3, 0, 3, 2, // front  (+z)
+		    5, 4, 6, 5, 6, 7, // back   (-z)
+		    1, 5, 7, 1, 7, 3, // right  (+x)
+		    4, 0, 2, 4, 2, 6, // left   (-x)
+		    2, 3, 7, 2, 7, 6, // top    (+y)
+		    4, 5, 1, 4, 1, 0, // bottom (-y)
+		};
+
+		std::vector<Resource::MeshInstance> instances = {Resource::MeshInstance{
+		    .subMeshes = {Resource::SubMesh{
+		        .range =
+		            {
+		                .startIndex   = 0,
+		                .indexCount   = static_cast<uint32_t>(indices.size()),
+		                .vertexOffset = 0,
+		            },
+		        .mat = {},
+		    }},
+		    .transform = glm::mat4(1.0f),
+		}};
+
+		fallbackModel = Resource::AllocateNonOwning<Model>();
+		Resource::CreateModel(fallbackModel, vertices, indices, instances);
+
+		PRINT_DEBUG("Created fallback model.");
+
+		sModelHasBeenCreated = true;
+	}
+
+	// Increment ref counter (take ownership).
+	Resource::PoolInstance<Model>().AddRef(fallbackModel);
+
+	return fallbackModel;
+}
+
 Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 {
 	const auto& modelMetadata = AssetManager::GetMetadata<Metadata::Model>(modelEntry);
@@ -394,6 +454,12 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 	tg3_error_code err =
 	    tg3_parse_file(&gltfModel, &errors, assetPath.data(), static_cast<uint32_t>(assetPath.length()), &opts);
 
+	// Used to ductape fix a bug where tg3 errors on an import but seemingly still allocates an arena that throws a
+	// segfault when attempted to be freed.
+	bool fileNotFound = false;
+
+	// Unallocated model handle.
+	Handle<Model> outModelHandle = {};
 	if (err != TG3_OK)
 	{
 		PRINT_ERROR("--- Error importing gltf file '{}' ---", assetPath);
@@ -424,28 +490,39 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 			    errEntry->message ? errEntry->message : "(no message)",
 			    errEntry->json_path ? errEntry->json_path : "(unknown path)"
 			);
+
+			if (errEntry->code == TG3_ERR_FILE_NOT_FOUND)
+			{
+				fileNotFound = true;
+			}
 		}
 
-		ENSURE(false);
-	}
-
-	Handle<Model> modelHandle = Resource::Allocate<Model>();
-
-	std::vector<Resource::Vertex> vertices            = {};
-	std::vector<uint32_t> indices                     = {};
-	std::vector<Resource::MeshInstance> meshInstances = {};
-
-	if (!ResolveModel(gltfModel, vertices, indices, meshInstances))
-	{
-		PRINT_ERROR("Failed resolving model from '{}'", assetPath);
+		outModelHandle = GetFallbackModelOwnership();
 	}
 	else
 	{
-		Resource::CreateModel(modelHandle, std::move(vertices), std::move(indices), std::move(meshInstances));
+		std::vector<Resource::Vertex> vertices            = {};
+		std::vector<uint32_t> indices                     = {};
+		std::vector<Resource::MeshInstance> meshInstances = {};
+
+		if (!ResolveModel(gltfModel, vertices, indices, meshInstances))
+		{
+			PRINT_ERROR("Failed resolving model from '{}'", assetPath);
+			outModelHandle = GetFallbackModelOwnership();
+		}
+		else
+		{
+			outModelHandle = Resource::Allocate<Model>();
+			Resource::CreateModel(outModelHandle, std::move(vertices), std::move(indices), std::move(meshInstances));
+		}
 	}
 
-	tg3_model_free(&gltfModel);
+	if (!fileNotFound)
+	{
+		tg3_model_free(&gltfModel);
+	}
+
 	tg3_error_stack_free(&errors);
 
-	return modelHandle;
+	return outModelHandle;
 }

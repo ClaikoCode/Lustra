@@ -230,6 +230,16 @@ namespace Resource
 		return PoolInstance<T>().Allocate();
 	}
 
+	// Will allocate but release immediately after.
+	// Useful when space needs to be allocated but ownership is to be distributed.
+	template <ResourceType T>
+	[[nodiscard]] inline Handle<T> AllocateNonOwning()
+	{
+		Handle<T> handle = Allocate<T>();
+		PoolInstance<T>().Release(handle);
+		return handle;
+	}
+
 	// Will explicitly call for destruction of resource pools of different types with their GPU destructors.
 	// Intended to be called when program is about to exit.
 	void ClearPoolsGPUMemory();

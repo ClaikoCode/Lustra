@@ -59,61 +59,31 @@ namespace Metadata
 	};
 } // namespace Metadata
 
-class AssetDatabase
-{
-  public:
-	void AddEntry(AssetID id, AssetType assetType, std::filesystem::path assetPath, MetadataPtr&& metaptr)
-	{
-		if (db.contains(id))
-		{
-			PRINT_WARNING("Overwriting asset with '{}'.", id);
-		}
-
-		db.emplace(
-		    id,
-		    AssetEntry{.assetType = assetType, .assetPath = std::move(assetPath), .assetMetadata = std::move(metaptr)}
-		);
-	}
-
-	void AddShader(AssetID shaderID, std::filesystem::path shaderPath, Metadata::Shader&& shaderMetadata)
-	{
-		AddEntry(
-		    shaderID,
-		    AssetType::Shader,
-		    std::move(shaderPath),
-		    make_metadata_ptr<Metadata::Shader>(std::move(shaderMetadata))
-		);
-	}
-
-	void AddModel(AssetID modelID, std::filesystem::path modelPath, Metadata::Model&& modelMetadata)
-	{
-		AddEntry(
-		    modelID,
-		    AssetType::Model,
-		    std::move(modelPath),
-		    make_metadata_ptr<Metadata::Model>(std::move(modelMetadata))
-		);
-	}
-
-	// Guarantees that asset exists in the database. Crashes otherwise.
-	const AssetEntry& GetEntry(AssetID assetID)
-	{
-		return db.at(assetID);
-	}
-
-	const std::unordered_map<AssetID, AssetEntry>& GetDB()
-	{
-		return db;
-	};
-
-  private:
-	std::unordered_map<AssetID, AssetEntry> db;
-};
-
 namespace AssetManager
 {
 	void Setup();
 	void Destroy();
 
-	const AssetEntry& GetEntry(AssetID id);
+	void AddEntry(AssetID id, AssetType assetType, std::filesystem::path assetPath, MetadataPtr&& metaptr);
+	void AddShader(AssetID shaderID, std::filesystem::path shaderPath, Metadata::Shader&& shaderMetadata);
+	void AddModel(AssetID modelID, std::filesystem::path modelPath, Metadata::Model&& modelMetadata);
+
+	// Guarantees that asset exists in the database. Crashes otherwise.
+	const AssetEntry& GetEntry(AssetID assetID);
+
+	template <typename Meta>
+	// Helper function to cast to correct metadata type.
+	const Meta& GetMetadata(const AssetEntry& assetEntry)
+	{
+		return *static_cast<const Meta*>(assetEntry.assetMetadata.get());
+	}
+
+	template <typename Meta>
+	// Gets metadata directly from ID (intended for when fetching asset entry first is unecessary).
+	const Meta& GetMetadataFromID(AssetID assetID)
+	{
+		const AssetEntry& assetEntry = GetEntry(assetID);
+		return GetMetadata<Meta>(assetEntry);
+	}
+
 }; // namespace AssetManager

@@ -372,8 +372,8 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 
 Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 {
-	const auto& modelMetadata = modelEntry.GetMetadata<Metadata::Model>();
-	(void)(modelMetadata);
+	const auto& modelMetadata = AssetManager::GetMetadata<Metadata::Model>(modelEntry);
+	UNUSED_VAR(modelMetadata);
 
 	tg3_parse_options opts;
 	tg3_error_stack errors;

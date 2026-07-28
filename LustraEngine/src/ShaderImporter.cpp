@@ -11,7 +11,7 @@ Handle<Shader> AssetImporter<Shader>::Import(const AssetEntry& assetEntry)
 {
 	Handle<Shader> shaderHandle = Resource::Allocate<Shader>();
 
-	const auto& shaderMeta = assetEntry.GetMetadata<Metadata::Shader>();
+	const auto& shaderMeta = AssetManager::GetMetadata<Metadata::Shader>(assetEntry);
 
 	const ShaderCompilationInfo compInfo = {
 	    .entryPoint  = shaderMeta.entryPoint,

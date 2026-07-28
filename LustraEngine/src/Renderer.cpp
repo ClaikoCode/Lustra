@@ -25,7 +25,7 @@ namespace
 {
 	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
 	{
-		const auto& shaderMeta         = AssetManager::GetEntry(id).GetMetadata<Metadata::Shader>();
+		const auto& shaderMeta         = AssetManager::GetMetadataFromID<Metadata::Shader>(id);
 		const Resource::Shader* shader = Resource::Get(AssetRegistry::Resolve<Resource::Shader>(id));
 
 		vk::ShaderStageFlagBits shaderStage;
@@ -46,7 +46,9 @@ namespace
 		}
 
 		vk::PipelineShaderStageCreateInfo info = {
-		    .stage = shaderStage, .module = shader->module, .pName = shaderMeta.entryPoint.c_str()
+		    .stage  = shaderStage,
+		    .module = shader->module,
+		    .pName  = shaderMeta.entryPoint.c_str(), // Safe because shaderMeta lifetime is not in this scope.
 		};
 
 		return info;

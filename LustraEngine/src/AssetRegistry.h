@@ -34,7 +34,7 @@ namespace AssetRegistry
 
 		for (auto [_, handle] : reg)
 		{
-			handle.Release();
+			Resource::Release(handle);
 		}
 
 		PRINT_DEBUG("Released '{}' registry.", Utils::TypeName<T>());

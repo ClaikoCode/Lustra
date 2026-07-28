@@ -14,7 +14,7 @@ namespace Resource
 	    std::vector<MeshInstance> instances
 	)
 	{
-		Model* model = modelHandle.Get();
+		Model* model = Resource::Get(modelHandle);
 		ENSURE(model != nullptr);
 
 		GPUMesh& gpuMesh = model->geomSource.gpuMesh;
@@ -43,7 +43,7 @@ namespace Resource
 
 	void DestroyModel(Handle<Model> modelHandle)
 	{
-		Model* model = modelHandle.Get();
+		Model* model = Resource::Get(modelHandle);
 		ENSURE(model != nullptr);
 
 		DestroyBuffer(model->geomSource.gpuMesh.vertexBuffer);

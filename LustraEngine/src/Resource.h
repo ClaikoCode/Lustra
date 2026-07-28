@@ -233,26 +233,22 @@ namespace Resource
 	// Will explicitly call for destruction of resource pools of different types with their GPU destructors.
 	// Intended to be called when program is about to exit.
 	void ClearPoolsGPUMemory();
+
+	// Gets the underlying data pointer at the handle.
+	template <ResourceType T>
+	T* Get(const Handle<T>& handle)
+	{
+		return Resource::PoolInstance<T>().Get(handle);
+	}
+
+	// Releases the resource and invalidates the handle.
+	template <ResourceType T>
+	void Release(Handle<T>& handle)
+	{
+		Resource::PoolInstance<T>().Release(handle);
+
+		// Invalidate handle
+		handle.index      = UINT32_MAX;
+		handle.generation = 0;
+	}
 } // namespace Resource
-
-template <ResourceType T>
-T* Handle<T>::Get()
-{
-	return Resource::PoolInstance<T>().Get(*this);
-}
-
-template <ResourceType T>
-const T* Handle<T>::Get() const
-{
-	return Resource::PoolInstance<T>().Get(*this);
-}
-
-template <ResourceType T>
-void Handle<T>::Release()
-{
-	Resource::PoolInstance<T>().Release(*this);
-
-	// Invalidate handle
-	index      = UINT32_MAX;
-	generation = 0;
-}

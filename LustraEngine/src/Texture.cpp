@@ -97,7 +97,7 @@ namespace Resource
 {
 	void CreateDepthTexture(Handle<DepthTexture> depthTex, const TextureDesc2D& depthDesc)
 	{
-		ENSURE(depthTex.Get() != nullptr);
+		ENSURE(Get(depthTex) != nullptr);
 
 		vk::ImageAspectFlags depthAspect = AspectOf(depthDesc.format);
 		ENSURE_EX(
@@ -105,7 +105,7 @@ namespace Resource
 		    "Could not get valid depth aspect from format. Check that format is valid."
 		);
 
-		DepthTexture& depthTexture = *depthTex.Get();
+		DepthTexture& depthTexture = *Get(depthTex);
 		depthTexture.desc          = depthDesc;
 
 		depthTexture.allocation = AssertVk(CreateTexture2D(depthDesc));
@@ -123,7 +123,7 @@ namespace Resource
 
 	void DestroyDepthTexture(Handle<DepthTexture> depthTex)
 	{
-		DepthTexture* depthTexturePtr = depthTex.Get();
+		DepthTexture* depthTexturePtr = Get(depthTex);
 		ENSURE(depthTexturePtr != nullptr);
 
 		if (depthTexturePtr->view)
@@ -139,7 +139,7 @@ namespace Resource
 
 	void ResizeDepthTexture(Handle<DepthTexture> depthTex, uint32_t newWidth, uint32_t newHeight)
 	{
-		DepthTexture* depthTexPtr = depthTex.Get();
+		DepthTexture* depthTexPtr = Get(depthTex);
 		ENSURE(depthTexPtr != nullptr);
 
 		// Destroy the resources at the handle.

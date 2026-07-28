@@ -26,7 +26,7 @@ namespace
 	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
 	{
 		const auto& shaderMeta         = AssetManager::GetEntry(id).GetMetadata<Metadata::Shader>();
-		const Resource::Shader* shader = AssetRegistry::Resolve<Resource::Shader>(id).Get();
+		const Resource::Shader* shader = Resource::Get(AssetRegistry::Resolve<Resource::Shader>(id));
 
 		vk::ShaderStageFlagBits shaderStage;
 		switch (shaderMeta.shaderType)
@@ -369,7 +369,7 @@ namespace Renderer
 	void Destroy()
 	{
 		// Release all internal resources. Resource pools will clear themselves elsewere.
-		gSceneDepth.Release();
+		Resource::Release(gSceneDepth);
 
 		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
@@ -454,8 +454,8 @@ namespace Renderer
 				uint32_t transformIndex = 0u;
 				for (const ModelInstance& modelInstance : modelInstances)
 				{
-					const Resource::Model& model = *modelInstance.modelHandle.Get();
-					for (const Resource::MeshInstance& meshInstance : model.instances)
+					const Resource::Model* model = Resource::Get(modelInstance.modelHandle);
+					for (const Resource::MeshInstance& meshInstance : model->instances)
 					{
 						instanceDataArray[transformIndex].transform =
 						    modelInstance.worldMatrix * meshInstance.transform;
@@ -592,7 +592,7 @@ namespace Renderer
 			        .dstAccessMask    = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
 			        .oldLayout        = vk::ImageLayout::eUndefined,
 			        .newLayout        = vk::ImageLayout::eDepthAttachmentOptimal,
-			        .image            = *gSceneDepth.Get(),
+			        .image            = *Resource::Get(gSceneDepth),
 			        .subresourceRange = {
 			            .aspectMask     = vk::ImageAspectFlagBits::eDepth,
 			            .baseMipLevel   = 0,
@@ -618,7 +618,7 @@ namespace Renderer
 			};
 
 			const vk::RenderingAttachmentInfo depthAttachInfo = {
-			    .imageView   = gSceneDepth.Get()->view,
+			    .imageView   = Resource::Get(gSceneDepth)->view,
 			    .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
 			    .loadOp      = vk::AttachmentLoadOp::eClear,
 			    .storeOp     = vk::AttachmentStoreOp::eDontCare,
@@ -665,7 +665,7 @@ namespace Renderer
 				uint32_t baseTransformIndex = 0;
 				for (const ModelInstance& modelInstance : modelInstances)
 				{
-					const Resource::Model& model = *modelInstance.modelHandle.Get();
+					const Resource::Model& model = *Resource::Get(modelInstance.modelHandle);
 
 					// Bind geometry buffers per model.
 					commandBuffer.bindVertexBuffers(0, model.geomSource.gpuMesh.vertexBuffer.buffer, {0});

@@ -14,7 +14,7 @@ namespace Resource
 	    const std::vector<std::string>& includeDirs
 	)
 	{
-		Shader* shader = shaderHandle.Get();
+		Shader* shader = Get(shaderHandle);
 		ENSURE(shader != nullptr);
 
 		bool compSuccessful = false;
@@ -42,7 +42,7 @@ namespace Resource
 
 	void DestroyShader(Handle<Shader> shaderHandle)
 	{
-		const Shader* shaderPtr = shaderHandle.Get();
+		const Shader* shaderPtr = Get(shaderHandle);
 
 		ENSURE(shaderPtr != nullptr);
 

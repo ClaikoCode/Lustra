@@ -4,6 +4,7 @@
 
 #include <cstdlib> // wcstomb, mbstowcs
 #include <cstring>
+#include <fstream>
 
 static const size_t sMaxSize = 4ull * Utils::MemoryUnitKB; // 4kB set as limit.
 constexpr const char* sTooMuchMemoryErrorMessage =
@@ -63,4 +64,28 @@ namespace Utils
 		return std::wstring(wideString, numberOfCharsWritten);
 	}
 
+	// Will use ifstream to read bytes into a vector holding the raw file bytes.
+	std::expected<std::vector<std::byte>, FileReadCode> ReadFileBytes(const std::filesystem::path& filePath)
+	{
+		// Go directly to end of file because size is calculated right away.
+		std::ifstream file(filePath.string(), std::ios::binary | std::ios::ate);
+
+		if (!file.is_open())
+		{
+			return std::unexpected(FileReadCode::FailedOpen);
+		}
+
+		const auto fileSize = file.tellg();
+		std::vector<std::byte> imageBytes(static_cast<size_t>(fileSize));
+
+		// Go back to beginning of file
+		file.seekg(0, std::ios::beg);
+
+		if (!file.read(reinterpret_cast<std::ios::char_type*>(imageBytes.data()), fileSize))
+		{
+			return std::unexpected(FileReadCode::FailedRead);
+		}
+
+		return imageBytes;
+	}
 } // namespace Utils

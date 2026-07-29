@@ -4,6 +4,8 @@
 #include "LustraLib/Utils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
+#define STBI_ASSERT(x) VALIDATE_EX(x, "STBI Assertion hit.")
 #include "stb/stb_image.h"
 
 #define TINYGLTF3_IMPLEMENTATION

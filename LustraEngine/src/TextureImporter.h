@@ -44,7 +44,7 @@ struct TextureArtifact
 };
 
 std::optional<TextureArtifact> ImportTextureRaw(
-    const std::span<std::byte> rawBytes, ColorSpace requestedColorSpace, uint32_t requestedMipCount = cMaxMipCount
+    std::span<const std::byte> rawBytes, ColorSpace requestedColorSpace, uint32_t requestedMipCount = cMaxMipCount
 );
 
 // Reads file and calls raw bytes version of import.

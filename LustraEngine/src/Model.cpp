@@ -48,5 +48,13 @@ namespace Resource
 
 		DestroyBuffer(model->geomSource.gpuMesh.vertexBuffer);
 		DestroyBuffer(model->geomSource.gpuMesh.indexBuffer);
+
+		for (MeshInstance& meshInstance : model->instances)
+		{
+			for (SubMesh& subMesh : meshInstance.subMeshes)
+			{
+				Release(subMesh.mat);
+			}
+		}
 	}
 } // namespace Resource

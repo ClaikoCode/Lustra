@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Handle.h"
 #include "LustraVulkan.h"
-#include "Resource.h"
 #include "vma/vk_mem_alloc.h"
 
 #include <cstdint>
@@ -25,7 +25,16 @@ namespace Resource
 		uint32_t width            = UINT32_MAX;
 		uint32_t height           = UINT32_MAX;
 		vk::Format format         = vk::Format::eUndefined;
-		vk::ImageUsageFlags usage = {};
+		vk::ImageUsageFlags usage = {}; // TODO:move this out and pass it as an argument in functions instead.
+		uint32_t mipLevels        = 1;  // 0 is assumed to be MAX mip levels.
+	};
+
+	struct Texture2D : ResourceTag
+	{
+		detail::ImageAllocation allocation = {};
+		vk::ImageView view                 = nullptr;
+
+		TextureDesc2D desc;
 	};
 
 	struct DepthTexture : ResourceTag
@@ -50,6 +59,13 @@ namespace Resource
 			};
 		}
 	};
+
+	void CreateTexture2D(Handle<Texture2D> textureHandle, const TextureDesc2D& texDesc);
+
+	void CreateReadOnlyTexture2D(
+	    Handle<Texture2D> textureHandle, TextureDesc2D& texDesc, std::span<const std::byte> imageData
+	);
+	void DestroyTexture2D(Handle<Texture2D> tex);
 
 	void CreateDepthTexture(Handle<DepthTexture> depthTex, const TextureDesc2D& depthDesc);
 	void DestroyDepthTexture(Handle<DepthTexture> depthTex);

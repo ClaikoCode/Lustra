@@ -29,7 +29,7 @@ using ReturnValueSTBI = std::expected<ImageDescSTBI, ImageLoadError>;
 // Forces bytes to always load as RGBA to be best compatible with engine consumption.
 // Packed array of [RGBARGBARGBA...] values.
 // Supported formats: float, U16 bit, U8 bit.
-ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<std::byte> rawBytes)
+ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<const std::byte> rawBytes)
 {
 	const stbi_uc* buffer = reinterpret_cast<const stbi_uc*>(rawBytes.data());
 	const int len         = static_cast<int>(rawBytes.size_bytes());
@@ -150,7 +150,9 @@ ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<std::byte> rawBytes)
 }
 
 std::optional<TextureArtifact> ImportTextureRaw(
-    const std::span<std::byte> rawBytes, ColorSpace requestedColorSpace, uint32_t requestedMipCount /* = cMaxMipCount */
+    const std::span<const std::byte> rawBytes,
+    ColorSpace requestedColorSpace,
+    uint32_t requestedMipCount /* = cMaxMipCount */
 )
 {
 	auto decodeResult = DecodeRawImageBytesWithSTBI(rawBytes);
@@ -170,8 +172,8 @@ std::optional<TextureArtifact> ImportTextureRaw(
 		return std::nullopt;
 	}
 
-	ImageDescSTBI imageDescSTBI = decodeResult.value();
-	TextureArtifact outArtifact = {};
+	ImageDescSTBI& imageDescSTBI = decodeResult.value();
+	TextureArtifact outArtifact  = {};
 
 	// Copy/move data from STBI information to struct that is to be exported.
 	outArtifact.data          = std::move(imageDescSTBI.data);

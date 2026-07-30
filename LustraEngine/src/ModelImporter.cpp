@@ -5,6 +5,7 @@
 #include "LustraLib/Logger.h"
 #include "LustraLib/Utils.h"
 #include "Resource.h"
+#include "TextureImporter.h"
 #include "glm/gtc/type_ptr.hpp"
 #include "tinygltf/tiny_gltf_v3.h"
 
@@ -49,13 +50,23 @@ struct GeomKeyHash
 // Accessor indices maps to unique vertex sets of a primitive, ignoring its material.
 using AccessorCache = std::unordered_map<AttributeIndices, Resource::PrimitiveRange, GeomKeyHash>;
 
+// Stores a handle for each material index of a model.
+using MaterialCache = std::unordered_map<int32_t, Handle<Resource::Material>>;
+
+// Stores a handle for each texture index of a model.
+// Uses uint64_t to allow unique combination of occlusion and metal+rough texture indices as an ORM texture index.
+using TextureCache = std::unordered_map<uint64_t, Handle<Resource::Texture2D>>;
+
 struct ProcessModelStatics
 {
+	const std::filesystem::path& baseFilePath;
 	const tg3_model& tg3Model;
 	std::vector<Resource::Vertex>& vertices;
 	std::vector<uint32_t>& indices;
 	std::vector<Resource::MeshInstance>& instances;
 	AccessorCache& accessorCache;
+	MaterialCache& matCache;
+	TextureCache& texCache;
 };
 
 // tg3 strings are not null terminated so make sure it is seen as a view.
@@ -69,6 +80,207 @@ inline glm::mat4 tg3MatToGLMMAt(const double matrix[16])
 {
 	// Explicit converting from a double mat4 to float mat4.
 	return glm::mat4(glm::make_mat4(matrix));
+}
+
+[[nodiscard]] Handle<Resource::Texture2D> GetDefaultTexture(Resource::Material::MapType mapType)
+{
+	static Handle<Resource::Texture2D> defaultAlbedo   = nullhandle;
+	static Handle<Resource::Texture2D> defaultNormal   = nullhandle;
+	static Handle<Resource::Texture2D> defaultEmissive = nullhandle;
+	static Handle<Resource::Texture2D> defaultORM      = nullhandle;
+
+	const uint32_t defaultTexSize   = 256u;
+	const size_t textureSizeInBytes = 4ull * defaultTexSize * defaultTexSize;
+
+	Resource::TextureDesc2D texDesc = {
+	    .width     = defaultTexSize,
+	    .height    = defaultTexSize,
+	    .format    = vk::Format::eUndefined, // Has to be defined per map type.
+	    .usage     = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+	    .mipLevels = cMaxMipCount
+	};
+
+	Handle<Resource::Texture2D> returnHandle = nullhandle;
+
+	switch (mapType)
+	{
+		case Resource::Material::MapType::Albedo:
+			if (defaultAlbedo == nullhandle)
+			{
+				const uint32_t checkerSquareSize = 4u;
+
+				std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(0u));
+
+				// Checkered magenta and black albedo texture.
+				for (uint32_t i = 0; i < albedoColors.size(); i += 4u)
+				{
+					// Four bytes per pixel
+					const uint32_t pixelIndex = i / 4u;
+
+					const uint32_t x = pixelIndex % defaultTexSize;
+					const uint32_t y = pixelIndex / defaultTexSize;
+
+					const bool xEvenSquare = (x / checkerSquareSize) % 2 == 0;
+					const bool yEvenSquare = (y / checkerSquareSize) % 2 == 0;
+
+					// 00 = black, 10 = magenta, 01, = magenta, 11 = black
+					const bool writeMagenta = xEvenSquare ^ yEvenSquare;
+
+					if (writeMagenta)
+					{
+						// Color in R and B channel = magenta.
+						albedoColors[i]     = std::byte(255u);
+						albedoColors[i + 2] = std::byte(255u);
+					}
+
+					// Alpha
+					albedoColors[i + 3] = std::byte(255u);
+				}
+
+				defaultAlbedo = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+				texDesc.format = vk::Format::eR8G8B8A8Srgb;
+				Resource::CreateReadOnlyTexture2D(defaultAlbedo, texDesc, albedoColors);
+			}
+			returnHandle = defaultAlbedo;
+			break;
+
+		case Resource::Material::MapType::Normal:
+			if (defaultNormal == nullhandle)
+			{
+				std::vector<std::byte> normalColors(textureSizeInBytes);
+
+				// Writes the standard blue where tangent vectors point straight out (0, 0, 1).
+				for (uint32_t i = 0; i < normalColors.size(); i += 4)
+				{
+					normalColors[i + 0] = std::byte(128u);
+					normalColors[i + 1] = std::byte(128u);
+					normalColors[i + 2] = std::byte(255u);
+					normalColors[i + 3] = std::byte(255u);
+				}
+
+				defaultNormal = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+				texDesc.format = vk::Format::eR8G8B8A8Unorm;
+				Resource::CreateReadOnlyTexture2D(defaultNormal, texDesc, normalColors);
+			}
+			returnHandle = defaultNormal;
+			break;
+
+		case Resource::Material::MapType::Emissive:
+			if (defaultEmissive == nullhandle)
+			{
+				// Black by default: no light emission.
+				std::vector<std::byte> emissiveColor(textureSizeInBytes, std::byte(0u));
+
+				// Write alpha so texture is visible.
+				for (uint32_t i = 0; i < emissiveColor.size(); i += 4)
+				{
+					emissiveColor[i + 3] = std::byte(255u);
+				}
+
+				defaultEmissive = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+				texDesc.format = vk::Format::eR8G8B8A8Srgb;
+				Resource::CreateReadOnlyTexture2D(defaultEmissive, texDesc, emissiveColor);
+			}
+			returnHandle = defaultEmissive;
+			break;
+
+		case Resource::Material::MapType::ORM:
+			if (defaultORM == nullhandle)
+			{
+				// Everything at 1. No occlusion and full alpha.
+				// Let default material properties for roghness and metallic scale their values.
+				std::vector<std::byte> ormColors(textureSizeInBytes, std::byte(255u));
+
+				defaultORM = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+				texDesc.format = vk::Format::eR8G8B8A8Unorm;
+				Resource::CreateReadOnlyTexture2D(defaultORM, texDesc, ormColors);
+			}
+			returnHandle = defaultORM;
+			break;
+	}
+
+	return returnHandle;
+};
+
+[[nodiscard]] Handle<Resource::Material> GetDefaultMaterial()
+{
+	static Handle<Resource::Material> defaultMaterial = nullhandle;
+
+	if (defaultMaterial == nullhandle)
+	{
+		const Resource::Material::Properties props = {}; // Default
+		const Resource::Material::Maps maps        = {
+		    .albedo   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Albedo)),
+		    .normal   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Normal)),
+		    .emissive = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Emissive)),
+		    .orm      = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::ORM)),
+		};
+
+		const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
+
+		Resource::CreateMaterial(matHandle, props, maps);
+
+		defaultMaterial = matHandle;
+	}
+
+	return defaultMaterial;
+}
+
+[[nodiscard]] Handle<Model> GetFallbackModel()
+{
+	static Handle<Model> fallbackModel = nullhandle;
+
+	if (fallbackModel == nullhandle)
+	{
+		const float n           = std::numbers::inv_sqrt3_v<float>; // 1/sqrt(3)
+		const glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
+
+		// NOLINTBEGIN(modernize-use-designated-initializers)
+		std::vector<Resource::Vertex> vertices = {
+		    {{-0.5f, -0.5f, 0.5f}, {}, {-n, -n, n}, {}, magenta},   // 0
+		    {{0.5f, -0.5f, 0.5f}, {}, {n, -n, n}, {}, magenta},     // 1
+		    {{-0.5f, 0.5f, 0.5f}, {}, {-n, n, n}, {}, magenta},     // 2
+		    {{0.5f, 0.5f, 0.5f}, {}, {n, n, n}, {}, magenta},       // 3
+		    {{-0.5f, -0.5f, -0.5f}, {}, {-n, -n, -n}, {}, magenta}, // 4
+		    {{0.5f, -0.5f, -0.5f}, {}, {n, -n, -n}, {}, magenta},   // 5
+		    {{-0.5f, 0.5f, -0.5f}, {}, {-n, n, -n}, {}, magenta},   // 6
+		    {{0.5f, 0.5f, -0.5f}, {}, {n, n, -n}, {}, magenta},     // 7
+		};
+		// NOLINTEND(modernize-use-designated-initializers)
+
+		std::vector<uint32_t> indices = {
+		    0, 1, 3, 0, 3, 2, // front  (+z)
+		    5, 4, 6, 5, 6, 7, // back   (-z)
+		    1, 5, 7, 1, 7, 3, // right  (+x)
+		    4, 0, 2, 4, 2, 6, // left   (-x)
+		    2, 3, 7, 2, 7, 6, // top    (+y)
+		    4, 5, 1, 4, 1, 0, // bottom (-y)
+		};
+
+		std::vector<Resource::MeshInstance> instances = {Resource::MeshInstance{
+		    .subMeshes = {Resource::SubMesh{
+		        .range =
+		            {
+		                .startIndex   = 0,
+		                .indexCount   = static_cast<uint32_t>(indices.size()),
+		                .vertexOffset = 0,
+		            },
+		        .mat = Resource::AddRef(GetDefaultMaterial()),
+		    }},
+		    .transform = glm::mat4(1.0f),
+		}};
+
+		fallbackModel = Resource::AllocateNonOwning<Model>();
+		Resource::CreateModel(fallbackModel, std::move(vertices), std::move(indices), std::move(instances));
+
+		PRINT_DEBUG("Created fallback model.");
+	}
+
+	return fallbackModel;
 }
 
 int32_t GetAccessorIndex(const tg3_primitive& prim, std::string_view attributeName)
@@ -107,7 +319,7 @@ uint64_t MeshVertexCount(const tg3_model& model, const tg3_mesh& mesh)
 	{
 		const tg3_primitive& prim = mesh.primitives[i];
 
-		int32_t posIndex = GetAccessorIndex(prim, "POSITION");
+		const int32_t posIndex = GetAccessorIndex(prim, "POSITION");
 		ENSURE(posIndex != -1);
 
 		vertexCount += model.accessors[posIndex].count;
@@ -124,7 +336,7 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 		return {nullptr, -1};
 	}
 
-	tg3_accessor accessor = model.accessors[accessorIndex];
+	const tg3_accessor accessor = model.accessors[accessorIndex];
 
 	const int32_t buffViewIndex = accessor.buffer_view;
 	if (buffViewIndex < 0)
@@ -140,6 +352,461 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 	ENSURE(stride != -1);
 
 	return {buff.data.data + buffView.byte_offset + accessor.byte_offset, stride};
+}
+
+Resource::PrimitiveRange GetPrimitiveRange(AttributeIndices atrIndicies, ProcessModelStatics& statics)
+{
+	// If this primtives points to a unique set of geometry, process and add the vertices to the source geometry
+	// vertex/index buffers.
+	if (!statics.accessorCache.contains(atrIndicies))
+	{
+		const tg3_accessor pos = statics.tg3Model.accessors[atrIndicies.pos];
+
+		// The spec should ensure this.
+		ENSURE(pos.type == TG3_TYPE_VEC3 || pos.type == TG3_COMPONENT_TYPE_FLOAT);
+
+		if (pos.type == TG3_COMPONENT_TYPE_FLOAT)
+		{
+			PRINT_ERROR("{}: single float value positions. Only 3D points supported.", kNotYetSupportedHeader);
+			ENSURE(false); // TODO: Handle actual error return values.
+		}
+
+		auto [posData, posStride]         = GetAttributeDataPtr(statics.tg3Model, atrIndicies.pos);
+		auto [uvData, uvStride]           = GetAttributeDataPtr(statics.tg3Model, atrIndicies.uv);
+		auto [normalData, normalStride]   = GetAttributeDataPtr(statics.tg3Model, atrIndicies.normal);
+		auto [tangentData, tangentStride] = GetAttributeDataPtr(statics.tg3Model, atrIndicies.tangent);
+		auto [colorData, colorStride]     = GetAttributeDataPtr(statics.tg3Model, atrIndicies.color);
+
+		// The counts for all other attributes are guaranteed to be the same.
+		const uint64_t vertexCount = pos.count;
+		statics.vertices.reserve(statics.vertices.size() + vertexCount);
+
+		Resource::PrimitiveRange primRange = {};
+		// Vertices of this primitive starts where the last one was added.
+		primRange.vertexOffset = static_cast<int32_t>(statics.vertices.size());
+
+		// Add vertices to vertex buffer.
+		for (uint64_t i = 0; i < vertexCount; i++)
+		{
+			Resource::Vertex v = {};
+
+			memcpy(&v.pos, posData + (i * posStride), 12);
+
+			if (uvData != nullptr)
+			{
+				memcpy(&v.uv, uvData + (i * uvStride), 8);
+			}
+
+			if (normalData != nullptr)
+			{
+				memcpy(&v.normal, normalData + (i * normalStride), 12);
+			}
+
+			if (tangentData != nullptr)
+			{
+				memcpy(&v.tangent, tangentData + (i * tangentStride), 12);
+			}
+
+			if (colorData != nullptr)
+			{
+				memcpy(&v.col, colorData + (i * colorStride), 16);
+			}
+
+			// Vertex is a trivial POD, no need to move.
+			statics.vertices.emplace_back(v);
+		}
+
+		// NOTE: The spec guarantees that the index accessor is relative to the vertex attribute accessors.
+		// This means that the index buffer indices start at 0, so no remapping is required between our
+		// vertex/index buffer and the glTF model ones.
+		const tg3_accessor& indexAccessor = statics.tg3Model.accessors[atrIndicies.index];
+		auto [indexData, indexStride]     = GetAttributeDataPtr(statics.tg3Model, atrIndicies.index);
+
+		const uint64_t indexCount = indexAccessor.count;
+		statics.indices.reserve(statics.indices.size() + indexCount);
+
+		// Indicies of this primitive starts where the last one was added.
+		primRange.startIndex = static_cast<uint32_t>(statics.indices.size());
+		primRange.indexCount = static_cast<uint32_t>(indexCount);
+
+		// Add indices to index buffer.
+		switch (indexAccessor.component_type)
+		{
+			case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
+				for (size_t i = 0; i < indexCount; i++)
+				{
+					statics.indices.push_back(indexData[i]);
+				}
+				break;
+			case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
+				for (size_t i = 0; i < indexCount; i++)
+				{
+					statics.indices.push_back(reinterpret_cast<const uint16_t*>(indexData)[i]);
+				}
+				break;
+			case TG3_COMPONENT_TYPE_UNSIGNED_INT:
+				for (size_t i = 0; i < indexCount; i++)
+				{
+					statics.indices.push_back(reinterpret_cast<const uint32_t*>(indexData)[i]);
+				}
+				break;
+			default:
+				CHECK_UNREACHABLE();
+		}
+
+		// Add the primitive range to the accessor cache.
+		statics.accessorCache.emplace(atrIndicies, primRange);
+	}
+	else
+	{
+		PRINT_DEBUG("Accessor cache hit!");
+	}
+
+	return statics.accessorCache[atrIndicies];
+}
+
+std::optional<TextureArtifact> ResolveTextureArtifact(
+    int32_t texIndex, ColorSpace colorSpace, ProcessModelStatics& statics
+)
+{
+	if (texIndex == -1)
+	{
+		return std::nullopt;
+	}
+
+	const tg3_model& tg3Model = statics.tg3Model;
+	const tg3_texture& tex    = tg3Model.textures[texIndex];
+
+	if (tex.source == -1)
+	{
+		// TODO: Check extensions and see if source is there.
+		return std::nullopt;
+	}
+
+	const tg3_image& image = tg3Model.images[tex.source];
+
+	if (image.as_is == 0)
+	{
+		return std::nullopt;
+	}
+
+	std::optional<TextureArtifact> texArtifact = {};
+
+	if (image.buffer_view != -1)
+	{
+		const tg3_buffer_view& buffView = tg3Model.buffer_views[image.buffer_view];
+
+		const std::span<const std::byte> imageSpan(
+		    reinterpret_cast<const std::byte*>(tg3Model.buffers[buffView.buffer].data.data) + buffView.byte_offset,
+		    buffView.byte_length
+		);
+
+		texArtifact = ImportTextureRaw(imageSpan, colorSpace);
+	}
+	else
+	{
+		ENSURE(image.uri.data != nullptr);
+
+		const std::string_view uri = tg3StrToStrview(image.uri);
+
+		texArtifact = ImportTexture(statics.baseFilePath / uri, colorSpace);
+	}
+
+	return texArtifact;
+}
+
+tg3_sampler GetSampler(int32_t texIndex, const tg3_model& tg3Model)
+{
+	const tg3_texture& tex = tg3Model.textures[texIndex];
+
+	tg3_sampler sampler = {};
+
+	// Default sampler wrap must be REPEAT according to glTF spec.
+	sampler.wrap_s = TG3_TEXTURE_WRAP_REPEAT;
+	sampler.wrap_t = TG3_TEXTURE_WRAP_REPEAT;
+
+	// This is engine choice.
+	sampler.min_filter = -1;
+	sampler.mag_filter = -1;
+
+	if (tex.sampler != -1)
+	{
+		sampler = tg3Model.samplers[tex.sampler];
+	}
+
+	return sampler;
+}
+
+Handle<Resource::Texture2D> GetSimpleTextureHandle(
+    int32_t texIndex, ProcessModelStatics& statics, Resource::Material::MapType mapType
+)
+{
+	if (texIndex == -1)
+	{
+		return GetDefaultTexture(mapType);
+	}
+
+	const uint64_t texKey = static_cast<uint64_t>(texIndex);
+
+	if (!statics.texCache.contains(texKey))
+	{
+		ColorSpace colorSpace = ColorSpace::Unknown;
+		switch (mapType)
+		{
+			case Resource::Material::MapType::Emissive:
+			case Resource::Material::MapType::Albedo:
+				colorSpace = ColorSpace::sRGB;
+				break;
+
+			case Resource::Material::MapType::Normal:
+				colorSpace = ColorSpace::Linear;
+				break;
+
+			case Resource::Material::MapType::ORM:
+				// TODO: Handle this better as ORM should not be allowed to be sent into this function.
+				CHECK_UNREACHABLE();
+				break;
+		}
+
+		std::optional<TextureArtifact> result = ResolveTextureArtifact(texIndex, colorSpace, statics);
+
+		Handle<Resource::Texture2D> texHandle = {};
+		if (!result)
+		{
+			PRINT_DEBUG("Could not resolve map for map type '{}'. Using default.", (uint8_t)mapType);
+			texHandle = GetDefaultTexture(mapType);
+		}
+		else
+		{
+			const TextureArtifact& texArtifact = result.value();
+			const tg3_sampler sampler          = GetSampler(texIndex, statics.tg3Model);
+			UNUSED_VAR(sampler); // TODO: Use sampler.
+
+			vk::Format format = vk::Format::eUndefined;
+			switch (texArtifact.componentType)
+			{
+				case ComponentType::U8:
+					format = colorSpace == ColorSpace::sRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+					break;
+				case ComponentType::U16:
+					format = vk::Format::eR16G16B16A16Unorm;
+					break;
+				case ComponentType::F32:
+					format = vk::Format::eR32G32B32A32Sfloat;
+					break;
+				case ComponentType::Unknown:
+					CHECK_UNREACHABLE();
+			}
+
+			Resource::TextureDesc2D texDesc = {
+			    .width     = texArtifact.dims.width,
+			    .height    = texArtifact.dims.height,
+			    .format    = format,
+			    .usage     = vk::ImageUsageFlagBits::eSampled,
+			    .mipLevels = texArtifact.mipCount
+			};
+
+			texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
+			Resource::CreateReadOnlyTexture2D(texHandle, texDesc, texArtifact.data);
+		}
+
+		statics.texCache.emplace(texKey, texHandle);
+	}
+	else
+	{
+		PRINT_DEBUG("Texture cache hit!");
+	}
+
+	return statics.texCache[texKey];
+}
+
+Handle<Resource::Texture2D> GetORMTextureHandle(
+    int32_t occlusionTexIndex, int32_t metalRoughTexIndex, ProcessModelStatics& statics
+)
+{
+	if (occlusionTexIndex == -1 && metalRoughTexIndex == -1)
+	{
+		return GetDefaultTexture(Resource::Material::MapType::ORM);
+	}
+
+	// Takes two int32s and puts them in the two 32 bit parts of a uint64. Initial uint32_t cast to allow index of -1 to
+	// be a valid key. Endianness decides if numbers are put in lower or higher end of those 64 bits, but the unique
+	// number produced is what is essential.
+	const uint64_t ormTexKey = (static_cast<uint64_t>(static_cast<uint32_t>(occlusionTexIndex)) << 32) |
+	                           (static_cast<uint64_t>(static_cast<uint32_t>(metalRoughTexIndex)));
+
+	if (!statics.texCache.contains(ormTexKey))
+	{
+		const ColorSpace colorSpace = ColorSpace::Linear;
+
+		std::optional<TextureArtifact> occlusionResult = ResolveTextureArtifact(occlusionTexIndex, colorSpace, statics);
+
+		std::optional<TextureArtifact> metalRoughResult =
+		    ResolveTextureArtifact(metalRoughTexIndex, colorSpace, statics);
+
+		Handle<Resource::Texture2D> texHandle = {};
+		if (!occlusionResult && !metalRoughResult)
+		{
+			PRINT_DEBUG("Couldnt resolve occlusion or metal roughtness textures. Using default ORM.");
+			texHandle = GetDefaultTexture(Resource::Material::MapType::ORM);
+		}
+		else
+		{
+			std::span<std::byte> ormDataSpan = {};
+			Resource::TextureDesc2D texDesc  = {
+			    .format = vk::Format::eR8G8B8A8Unorm, // Guaranteed by the spec (unless extensions are used).
+			    .usage  = vk::ImageUsageFlagBits::eSampled,
+			};
+
+			if (!metalRoughResult)
+			{
+				TextureArtifact& occlusionTexArtifact = occlusionResult.value();
+
+				// Write default data for roughness + metallic channel.
+				for (size_t i = 0; i < occlusionTexArtifact.data.size(); i += 4)
+				{
+					// G = Roughness
+					occlusionTexArtifact.data[i + 1] = std::byte(255u); // Full roughness
+
+					// B = Metallic
+					occlusionTexArtifact.data[i + 2] = std::byte(0u); // No metallic properties
+				}
+
+				texDesc.width     = occlusionTexArtifact.dims.width;
+				texDesc.height    = occlusionTexArtifact.dims.height;
+				texDesc.mipLevels = occlusionTexArtifact.mipCount;
+
+				ormDataSpan = occlusionTexArtifact.data;
+			}
+			else if (!occlusionResult)
+			{
+				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
+
+				// Write default data for occlusion channel.
+				for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
+				{
+					// R = Occlusion
+					metalRoughTexArtifact.data[i] = std::byte(255u); // Equates to no ambient occlusion
+				}
+
+				texDesc.width     = metalRoughTexArtifact.dims.width;
+				texDesc.height    = metalRoughTexArtifact.dims.height;
+				texDesc.mipLevels = metalRoughTexArtifact.mipCount;
+
+				ormDataSpan = metalRoughTexArtifact.data;
+			}
+			else
+			{
+				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
+				TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
+
+				ENSURE(metalRoughTexArtifact.dims.channels == 4 && occlusionTexArtifact.dims.channels == 4);
+
+				const bool sameDims = (metalRoughTexArtifact.dims.width == occlusionTexArtifact.dims.width) &&
+				                      (metalRoughTexArtifact.dims.height == occlusionTexArtifact.dims.height);
+
+				if (!sameDims)
+				{
+					PRINT_WARNING("ORM texture dimensions does not match with each other. Using default texture.");
+					texHandle = GetDefaultTexture(Resource::Material::MapType::ORM);
+					// TODO: Implement bilinear sampling and nearest neighbor sampling.
+				}
+				else
+				{
+					// Write occlusion into roughness and metallic buffer.
+					// The spec ensures that data channels are U8.
+					for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
+					{
+						metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
+					}
+
+					// Guaranteed by the spec (unless extensions are used).
+					CHECK(
+					    metalRoughTexArtifact.componentType == ComponentType::U8 &&
+					    occlusionTexArtifact.componentType == ComponentType::U8
+					);
+
+					texDesc = {
+					    .width     = metalRoughTexArtifact.dims.width,
+					    .height    = metalRoughTexArtifact.dims.height,
+					    .format    = vk::Format::eR8G8B8A8Unorm,
+					    .usage     = vk::ImageUsageFlagBits::eSampled,
+					    .mipLevels = metalRoughTexArtifact.mipCount
+					};
+
+					ormDataSpan = metalRoughTexArtifact.data;
+				}
+			}
+
+			if (ormDataSpan.empty())
+			{
+				PRINT_DEBUG("Empty data span for ORM texture. Using default.");
+				texHandle = GetDefaultTexture(Resource::Material::MapType::ORM);
+			}
+			else
+			{
+				texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
+				Resource::CreateReadOnlyTexture2D(texHandle, texDesc, ormDataSpan);
+			}
+		}
+
+		statics.texCache.emplace(ormTexKey, texHandle);
+	}
+	else
+	{
+		PRINT_DEBUG("Texture cache hit!");
+	}
+
+	return statics.texCache.at(ormTexKey);
+}
+
+Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStatics& statics)
+{
+	if (matIndex == -1)
+	{
+		return GetDefaultMaterial();
+	}
+
+	else if (!statics.matCache.contains(matIndex))
+	{
+		const tg3_material& material = statics.tg3Model.materials[matIndex];
+
+		const int32_t normalTexIndex     = material.normal_texture.index;
+		const int32_t emissiveTexIndex   = material.emissive_texture.index;
+		const int32_t occlusionTexIndex  = material.occlusion_texture.index;
+		const int32_t albedoTexIndex     = material.pbr_metallic_roughness.base_color_texture.index;
+		const int32_t metalRoughTexIndex = material.pbr_metallic_roughness.metallic_roughness_texture.index;
+
+		const Resource::Material::Maps maps = {
+		    .albedo =
+		        Resource::AddRef(GetSimpleTextureHandle(albedoTexIndex, statics, Resource::Material::MapType::Albedo)),
+		    .normal =
+		        Resource::AddRef(GetSimpleTextureHandle(normalTexIndex, statics, Resource::Material::MapType::Normal)),
+		    .emissive = Resource::AddRef(
+		        GetSimpleTextureHandle(emissiveTexIndex, statics, Resource::Material::MapType::Emissive)
+		    ),
+		    .orm = Resource::AddRef(GetORMTextureHandle(occlusionTexIndex, metalRoughTexIndex, statics)),
+		};
+
+		const Resource::Material::Properties props = {
+		    .albedoFactor      = glm::make_vec4(material.pbr_metallic_roughness.base_color_factor),
+		    .emissiveFactor    = glm::make_vec3(material.emissive_factor),
+		    .occlusionStrength = static_cast<float>(material.occlusion_texture.strength),
+		    .metallicFactor    = static_cast<float>(material.pbr_metallic_roughness.metallic_factor),
+		    .roughnessFactor   = static_cast<float>(material.pbr_metallic_roughness.roughness_factor),
+		};
+
+		const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
+		Resource::CreateMaterial(matHandle, props, maps);
+
+		statics.matCache.emplace(matIndex, matHandle);
+	}
+	else
+	{
+		PRINT_DEBUG("Material cache hit!");
+	}
+
+	return statics.matCache.at(matIndex);
 }
 
 [[nodiscard]] bool ProcessModel(ProcessModelStatics& statics, int32_t nodeIndex, glm::mat4 parentTransform)
@@ -181,112 +848,13 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 
 			const AttributeIndices atrIndicies = GetAttributeIndices(primitive);
 
-			// If this primtives points to a unique set of geometry, process and add the vertices to the source geometry
-			// vertex/index buffers.
-			if (!statics.accessorCache.contains(atrIndicies))
-			{
-				tg3_accessor pos = statics.tg3Model.accessors[atrIndicies.pos];
-
-				// The spec should ensure this.
-				ENSURE(pos.type == TG3_TYPE_VEC3 || pos.type == TG3_COMPONENT_TYPE_FLOAT);
-
-				if (pos.type == TG3_COMPONENT_TYPE_FLOAT)
-				{
-					PRINT_ERROR("{}: single float value positions. Only 3D points supported.", kNotYetSupportedHeader);
-					return false;
-				}
-
-				auto [posData, posStride]         = GetAttributeDataPtr(statics.tg3Model, atrIndicies.pos);
-				auto [uvData, uvStride]           = GetAttributeDataPtr(statics.tg3Model, atrIndicies.uv);
-				auto [normalData, normalStride]   = GetAttributeDataPtr(statics.tg3Model, atrIndicies.normal);
-				auto [tangentData, tangentStride] = GetAttributeDataPtr(statics.tg3Model, atrIndicies.tangent);
-				auto [colorData, colorStride]     = GetAttributeDataPtr(statics.tg3Model, atrIndicies.color);
-
-				// The counts for all other attributes are guaranteed to be the same.
-				const uint64_t vertexCount = pos.count;
-				statics.vertices.reserve(statics.vertices.size() + vertexCount);
-
-				Resource::PrimitiveRange primRange = {};
-				// Vertices of this primitive starts where the last one was added.
-				primRange.vertexOffset = static_cast<int32_t>(statics.vertices.size());
-
-				// Add vertices to vertex buffer.
-				for (uint64_t i = 0; i < vertexCount; i++)
-				{
-					Resource::Vertex v = {};
-
-					memcpy(&v.pos, posData + (i * posStride), 12);
-
-					if (uvData != nullptr)
-					{
-						memcpy(&v.uv, uvData + (i * uvStride), 8);
-					}
-
-					if (normalData != nullptr)
-					{
-						memcpy(&v.normal, normalData + (i * normalStride), 12);
-					}
-
-					if (tangentData != nullptr)
-					{
-						memcpy(&v.tangent, tangentData + (i * tangentStride), 12);
-					}
-
-					if (colorData != nullptr)
-					{
-						memcpy(&v.col, colorData + (i * colorStride), 16);
-					}
-
-					// Vertex is a trivial POD, no need to move.
-					statics.vertices.emplace_back(v);
-				}
-
-				// NOTE: The spec guarantees that the index accessor is relative to the vertex attribute accessors.
-				// This means that the index buffer indices start at 0, so no remapping is required between our
-				// vertex/index buffer and the glTF model ones.
-				const tg3_accessor& indexAccessor = statics.tg3Model.accessors[atrIndicies.index];
-				auto [indexData, indexStride]     = GetAttributeDataPtr(statics.tg3Model, atrIndicies.index);
-
-				const uint64_t indexCount = indexAccessor.count;
-				statics.indices.reserve(statics.indices.size() + indexCount);
-
-				// Indicies of this primitive starts where the last one was added.
-				primRange.startIndex = static_cast<uint32_t>(statics.indices.size());
-				primRange.indexCount = static_cast<uint32_t>(indexCount);
-
-				// Add indices to index buffer.
-				switch (indexAccessor.component_type)
-				{
-					case TG3_COMPONENT_TYPE_UNSIGNED_BYTE:
-						for (size_t i = 0; i < indexCount; i++)
-						{
-							statics.indices.push_back(indexData[i]);
-						}
-						break;
-					case TG3_COMPONENT_TYPE_UNSIGNED_SHORT:
-						for (size_t i = 0; i < indexCount; i++)
-						{
-							statics.indices.push_back(reinterpret_cast<const uint16_t*>(indexData)[i]);
-						}
-						break;
-					case TG3_COMPONENT_TYPE_UNSIGNED_INT:
-						for (size_t i = 0; i < indexCount; i++)
-						{
-							statics.indices.push_back(reinterpret_cast<const uint32_t*>(indexData)[i]);
-						}
-						break;
-					default:
-						CHECK_UNREACHABLE();
-				}
-
-				// Add the primitive range to the accessor cache.
-				statics.accessorCache.emplace(atrIndicies, primRange);
-			}
+			Resource::PrimitiveRange range = GetPrimitiveRange(atrIndicies, statics);
+			Handle<Resource::Material> mat = Resource::AddRef(GetMaterialHandle(primitive.material, statics));
 
 			meshInstance.subMeshes.emplace_back(
 			    Resource::SubMesh{
-			        .range = statics.accessorCache[atrIndicies],
-			        .mat   = {}, // TODO: Resolve material handle.
+			        .range = range,
+			        .mat   = mat,
 			    }
 			);
 		}
@@ -312,6 +880,7 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 // Returns true if model could be fully resolved.
 // Input model is assumed to have at least one scene containing a scene node.
 [[nodiscard]] bool ResolveModel(
+    const std::filesystem::path& baseFilePath,
     const tg3_model& tg3Model,
     std::vector<Resource::Vertex>& vertices,
     std::vector<uint32_t>& indices,
@@ -356,78 +925,27 @@ std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, 
 			    "{}: model animations. Parsing will continue without processing animations.", kNotYetSupportedHeader
 			);
 		}
+
+		// TODO: Check for extensions that are not supported.
 	}
 
 	AccessorCache accessorCache = {};
+	MaterialCache matCache      = {};
+	TextureCache texCache       = {};
 	auto parentMatrix           = glm::mat4(1.0f);
 
 	ProcessModelStatics statics = {
+	    .baseFilePath  = baseFilePath,
 	    .tg3Model      = tg3Model,
 	    .vertices      = vertices,
 	    .indices       = indices,
 	    .instances     = instances,
 	    .accessorCache = accessorCache,
+	    .matCache      = matCache,
+	    .texCache      = texCache,
 	};
 
 	return ProcessModel(statics, 0, parentMatrix);
-}
-
-// Will increment ref counter as the caller is now responsible for ensuring that it also has a release-path.
-[[nodiscard]] Handle<Model> GetFallbackModelOwnership()
-{
-	static bool sModelHasBeenCreated   = false;
-	static Handle<Model> fallbackModel = {};
-
-	if (!sModelHasBeenCreated)
-	{
-		constexpr float n           = std::numbers::inv_sqrt3_v<float>; // 1/sqrt(3)
-		constexpr glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
-
-		std::vector<Resource::Vertex> vertices = {
-		    {{-0.5f, -0.5f, 0.5f}, {}, {-n, -n, n}, {}, magenta},   // 0
-		    {{0.5f, -0.5f, 0.5f}, {}, {n, -n, n}, {}, magenta},     // 1
-		    {{-0.5f, 0.5f, 0.5f}, {}, {-n, n, n}, {}, magenta},     // 2
-		    {{0.5f, 0.5f, 0.5f}, {}, {n, n, n}, {}, magenta},       // 3
-		    {{-0.5f, -0.5f, -0.5f}, {}, {-n, -n, -n}, {}, magenta}, // 4
-		    {{0.5f, -0.5f, -0.5f}, {}, {n, -n, -n}, {}, magenta},   // 5
-		    {{-0.5f, 0.5f, -0.5f}, {}, {-n, n, -n}, {}, magenta},   // 6
-		    {{0.5f, 0.5f, -0.5f}, {}, {n, n, -n}, {}, magenta},     // 7
-		};
-
-		std::vector<uint32_t> indices = {
-		    0, 1, 3, 0, 3, 2, // front  (+z)
-		    5, 4, 6, 5, 6, 7, // back   (-z)
-		    1, 5, 7, 1, 7, 3, // right  (+x)
-		    4, 0, 2, 4, 2, 6, // left   (-x)
-		    2, 3, 7, 2, 7, 6, // top    (+y)
-		    4, 5, 1, 4, 1, 0, // bottom (-y)
-		};
-
-		std::vector<Resource::MeshInstance> instances = {Resource::MeshInstance{
-		    .subMeshes = {Resource::SubMesh{
-		        .range =
-		            {
-		                .startIndex   = 0,
-		                .indexCount   = static_cast<uint32_t>(indices.size()),
-		                .vertexOffset = 0,
-		            },
-		        .mat = {},
-		    }},
-		    .transform = glm::mat4(1.0f),
-		}};
-
-		fallbackModel = Resource::AllocateNonOwning<Model>();
-		Resource::CreateModel(fallbackModel, vertices, indices, instances);
-
-		PRINT_DEBUG("Created fallback model.");
-
-		sModelHasBeenCreated = true;
-	}
-
-	// Increment ref counter (take ownership).
-	Resource::PoolInstance<Model>().AddRef(fallbackModel);
-
-	return fallbackModel;
 }
 
 Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
@@ -450,8 +968,12 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 	// Very rarely does a gltf file include anything else than single precision formats for floats.
 	opts.parse_float32 = 1;
 
-	std::string_view assetPath = modelEntry.assetPath.c_str();
-	tg3_error_code err =
+	// This does not really do anything for tg3, it simply forces the as_is value for images to be 1.
+	// To actually fetch data, check the buffer view for an image or the URI if that doesnt exist.
+	opts.images_as_is = 1;
+
+	std::string assetPath = modelEntry.assetPath.string();
+	const tg3_error_code err =
 	    tg3_parse_file(&gltfModel, &errors, assetPath.data(), static_cast<uint32_t>(assetPath.length()), &opts);
 
 	// Used to ductape fix a bug where tg3 errors on an import but seemingly still allocates an arena that throws a
@@ -497,7 +1019,8 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 			}
 		}
 
-		outModelHandle = GetFallbackModelOwnership();
+		PRINT_ERROR("Failed parsing model from '{}' through TG3. Using fallback model.", assetPath);
+		outModelHandle = GetFallbackModel();
 	}
 	else
 	{
@@ -505,14 +1028,15 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 		std::vector<uint32_t> indices                     = {};
 		std::vector<Resource::MeshInstance> meshInstances = {};
 
-		if (!ResolveModel(gltfModel, vertices, indices, meshInstances))
+		const std::filesystem::path baseFilePath = modelEntry.assetPath.parent_path();
+		if (!ResolveModel(baseFilePath, gltfModel, vertices, indices, meshInstances))
 		{
-			PRINT_ERROR("Failed resolving model from '{}'", assetPath);
-			outModelHandle = GetFallbackModelOwnership();
+			PRINT_ERROR("Failed resolving model from '{}'. Using fallback model.", assetPath);
+			outModelHandle = GetFallbackModel();
 		}
 		else
 		{
-			outModelHandle = Resource::Allocate<Model>();
+			outModelHandle = Resource::AllocateNonOwning<Model>();
 			Resource::CreateModel(outModelHandle, std::move(vertices), std::move(indices), std::move(meshInstances));
 		}
 	}
@@ -524,5 +1048,5 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 
 	tg3_error_stack_free(&errors);
 
-	return outModelHandle;
+	return Resource::AddRef(outModelHandle);
 }

@@ -529,9 +529,9 @@ namespace Graphics
 		// Create transfer pool
 		{
 			const vk::CommandPoolCreateInfo transferPoolInfo = {
-			    .flags = vk::CommandPoolCreateFlagBits::eTransient, // Will only create command buffers during copy
-			                                                        // calls. Shortlived.
-			    .queueFamilyIndex = transferQueue.index,
+			    // Will only create command buffers during copy calls. Shortlived.
+			    .flags            = vk::CommandPoolCreateFlagBits::eTransient,
+			    .queueFamilyIndex = GetQueueUsedForTransfers().index,
 			};
 
 			gTransferPool = AssertVk(gVkDevice.createCommandPool(transferPoolInfo, gAllocationCallbacks));
@@ -744,6 +744,12 @@ namespace Graphics
 		PRINT_DEBUG("Waiting done!");
 	}
 
+	CommandQueue GetQueueUsedForTransfers()
+	{
+		ENSURE(graphicsQueue.queue != VK_NULL_HANDLE);
+
+		return graphicsQueue;
+	}
 } // namespace Graphics
 
 // Struct definitions

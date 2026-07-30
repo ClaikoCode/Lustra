@@ -4,18 +4,9 @@
 #include "Handle.h"
 #include "LustraGLM.h"
 #include "LustraVulkan.h"
+#include "Material.h"
 
 #include <vector>
-
-// Should come from a Material.h file.
-namespace Resource
-{
-	struct Material : ResourceTag
-	{
-		// Should hold handles to material textures.
-		int placeholder;
-	};
-} // namespace Resource
 
 namespace Resource
 {

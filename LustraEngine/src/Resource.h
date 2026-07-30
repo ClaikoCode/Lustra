@@ -94,9 +94,10 @@ struct ResourcePool
 			if (aliveSlot.refCount > 0)
 			{
 				PRINT_WARNING(
-				    "Calling deconstructor of '{}' object with {} references left. Make sure all resource handles are "
-				    "released beforehand.",
+				    "Calling deconstructor of '{}' object at index {} with {} references left. Make sure all resource "
+				    "handles are released beforehand.",
 				    Utils::TypeName<T>(),
+				    aliveObjectIndex,
 				    aliveSlot.refCount
 				);
 			}
@@ -177,6 +178,7 @@ struct ResourcePool
 	void Release(Handle<T> handle)
 	{
 		ENSURE(IsHandleValid(handle));
+		ENSURE(pool[handle.index].refCount != 0);
 
 		pool[handle.index].refCount--;
 	}
@@ -212,6 +214,7 @@ struct ResourcePool
 	}
 };
 
+// The interface to resources.
 namespace Resource
 {
 	template <ResourceType T>
@@ -224,6 +227,7 @@ namespace Resource
 		return poolInstance;
 	}
 
+	// Allocates a resource in the resource pool. Has to be matched by a Release() call.
 	template <ResourceType T>
 	[[nodiscard]] inline Handle<T> Allocate()
 	{
@@ -231,12 +235,21 @@ namespace Resource
 	}
 
 	// Will allocate but release immediately after.
-	// Useful when space needs to be allocated but ownership is to be distributed.
+	// Useful when space needs to be allocated but ownership is to be distributed later.
 	template <ResourceType T>
 	[[nodiscard]] inline Handle<T> AllocateNonOwning()
 	{
 		Handle<T> handle = Allocate<T>();
 		PoolInstance<T>().Release(handle);
+		return handle;
+	}
+
+	// Used when caller claims shared ownership over the resource. Has to be matched by a Release() call.
+	// Returns the handle for ease of use.
+	template <ResourceType T>
+	inline Handle<T> AddRef(Handle<T> handle)
+	{
+		PoolInstance<T>().AddRef(handle);
 		return handle;
 	}
 
@@ -251,6 +264,13 @@ namespace Resource
 		return Resource::PoolInstance<T>().Get(handle);
 	}
 
+	// Assumes handle is valid.
+	template <ResourceType T>
+	T& GetRef(const Handle<T>& handle)
+	{
+		return *Get(handle);
+	}
+
 	// Releases the resource and invalidates the handle.
 	template <ResourceType T>
 	void Release(Handle<T>& handle)
@@ -258,7 +278,6 @@ namespace Resource
 		Resource::PoolInstance<T>().Release(handle);
 
 		// Invalidate handle
-		handle.index      = UINT32_MAX;
-		handle.generation = 0;
+		handle = nullhandle;
 	}
 } // namespace Resource

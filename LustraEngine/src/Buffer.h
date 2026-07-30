@@ -20,8 +20,8 @@ void DestroyBuffer(AllocatedBuffer& buffer);
 // Copies data from src to dst and waits on a fence till copy is done.
 void CopyBuffers(AllocatedBuffer& dst, AllocatedBuffer& src, size_t sizeInBytes);
 
-// Creates an upload buffer that will contain the data pointer by uploadData.
-[[nodiscard]] AllocatedBuffer CreateUploadBuffer(void* uploadData, size_t sizeInBytes);
+// Creates an upload buffer that will contain the data pointed to by uploadData.
+[[nodiscard]] AllocatedBuffer CreateUploadBuffer(const void* uploadData, size_t sizeInBytes);
 
 // Creates a host-visible buffer and uploads the CPU data through a copy transfer.
 [[nodiscard]] AllocatedBuffer CreateBufferFromCPUData(

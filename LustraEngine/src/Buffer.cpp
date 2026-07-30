@@ -42,7 +42,7 @@ void DestroyBuffer(AllocatedBuffer& buffer)
 	buffer.alloc  = {};
 }
 
-AllocatedBuffer CreateUploadBuffer(void* uploadData, size_t sizeInBytes)
+AllocatedBuffer CreateUploadBuffer(const void* uploadData, size_t sizeInBytes)
 {
 	const AllocatedBuffer buffer = CreateBuffer(
 	    sizeInBytes,
@@ -86,10 +86,10 @@ void CopyBuffers(AllocatedBuffer& dst, AllocatedBuffer& src, size_t sizeInBytes)
 	vk::SubmitInfo submitInfo = {};
 	submitInfo.setCommandBuffers(cmd);
 
-	AssertVk(Graphics::transferQueue.queue.submit(submitInfo, uploadFence));
+	AssertVk(Graphics::GetQueueUsedForTransfers().queue.submit(submitInfo, uploadFence));
 
 	vk::Result result =
-	    AssertVk(Graphics::gVkDevice.waitForFences(uploadFence, 1u, GraphicsUtils::TimeoutTime(10'000)));
+	    AssertVk(Graphics::gVkDevice.waitForFences(uploadFence, vk::True, GraphicsUtils::TimeoutTimeS(10)));
 
 	if (result == vk::Result::eTimeout)
 	{

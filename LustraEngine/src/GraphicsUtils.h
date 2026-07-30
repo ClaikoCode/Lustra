@@ -80,10 +80,16 @@ namespace GraphicsUtils
 
 	FeatureNamesInfo GetFeatureNames(vk::StructureType structType);
 
-	// Gives back time in nanoseconds, which is used for device wait timeouts.
-	inline uint64_t TimeoutTime(uint64_t timeInMS)
+	// Converts milliseconds to nanoseconds.
+	inline uint64_t TimeoutTimeMS(uint64_t timeInMilliseconds)
 	{
-		return timeInMS * 1'000'000u;
+		return timeInMilliseconds * 1'000'000u;
+	}
+
+	// Converts seconds to nanoseconds.
+	inline uint64_t TimeoutTimeS(uint64_t timeInSeconds)
+	{
+		return timeInSeconds * 1'000'000'000u;
 	}
 
 	using FeatureChain = vk::StructureChain<

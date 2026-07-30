@@ -5,10 +5,12 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
+#include "LustraPaths.h"
 #include "Model.h"
 #include "ModelImporter.h"
 #include "Shader.h"
 #include "ShaderImporter.h"
+#include "TextureImporter.h"
 
 #include <array>
 #include <chrono>
@@ -85,6 +87,11 @@ namespace Renderer
 {
 	void Setup()
 	{
+		// TODO: REMOVE LATER
+		{
+			ImportTexture(Lustra::Paths::ModelDir() / "sample_640×426.hdr", ColorSpace::sRGB);
+		}
+
 		// Scene depth creation
 		{
 			Resource::TextureDesc2D depthDesc = Resource::DepthTexture::CreateDesc(

@@ -98,7 +98,12 @@ namespace Graphics
 	void SetupSurface(const Window& window);
 	void CreateSwapchain(const Window& window);
 
+	// === HELPER FUNCTIONS ===
+
 	// Will call vkDeviceWaitIdle() to ensure all graphics work is done beyond the call.
 	void WaitForDevice();
+
+	// NOTE: Currently returns graphics queue. Will switch to transfer queue when async transfer becomes of interest.
+	CommandQueue GetQueueUsedForTransfers();
 
 } // namespace Graphics

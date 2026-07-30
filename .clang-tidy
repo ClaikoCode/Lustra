@@ -2,6 +2,8 @@
 # -readability-redundant-member-init    : DMI suppresses -Wmissing-field-initializers
 # -readability-use-concise-preprocessor-directives : defined() is not hard to write
 # -modernize-return-braced-init-list : Explicit constructor returns are more clear IMO
+# -modernize-use-auto : I think for simple types its easier to read without auto on LHS.
+
 Checks: |
   bugprone-*,
   -bugprone-easily-swappable-parameters,
@@ -15,6 +17,7 @@ Checks: |
   -modernize-avoid-c-arrays,
   -modernize-use-nodiscard,
   -modernize-return-braced-init-list,
+  -modernize-use-auto,
 
   readability-*,
   -readability-magic-numbers,
@@ -27,7 +30,6 @@ Checks: |
 
   concurrency-*,
 
-  misc-const-correctness,
   misc-definitions-in-headers,
   misc-misplaced-const,
   misc-redundant-expression,

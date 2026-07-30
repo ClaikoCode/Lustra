@@ -7,8 +7,12 @@ Diagnostics:
   Includes:
     IgnoreHeader:
       # Header proxy for specified way of including vulkan.hpp in Lustra.
-      - "LustraVulkan\\.h" 
+      - "LustraVulkan\\.h"
+      # Header proxy for typical glm includes and defines.
+      - "LustraGLM\\.h"
       # Ignore all files from vendored libraries.
       - "vendor/.*"
       # Header of headers for ease of use.
       - "LustraLib\\.h"
+  ClangTidy:
+    FastCheckFilter: None

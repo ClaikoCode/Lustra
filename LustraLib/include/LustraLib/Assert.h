@@ -41,7 +41,7 @@
 #if defined(_DEBUG)
 	#define _DEBUG_TRAP() __builtin_debugtrap()
 #else
-	#define _DEBUG_TRAP() _NO_OP_MACRO
+	#define _DEBUG_TRAP() _NO_OP_MACRO()
 #endif
 
 // ----- CHECK assertion base macros -----
@@ -62,7 +62,7 @@
 #else
 
     // Do nothing.
-	#define _LUSTRA_CHECK_BASE(expression, message) _NO_OP_MACRO
+	#define _LUSTRA_CHECK_BASE(expression, message) _NO_OP_MACRO()
 
 #endif
 // -------------------------------------------

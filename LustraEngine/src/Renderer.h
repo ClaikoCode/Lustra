@@ -35,15 +35,15 @@ namespace Renderer
 
 	struct ModelInstance
 	{
-		Handle<Resource::Model> modelHandle;
-		glm::mat4 worldMatrix;
+		Handle<Resource::Model> modelHandle = nullhandle;
+		glm::mat4 worldMatrix               = glm::mat4(1.0f);
 	};
 
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
 	constexpr uint32_t gMaxMeshes = 4096u;
 
-	inline Handle<Resource::DepthTexture> gSceneDepth;
+	inline Handle<Resource::Texture2D> gSceneDepth;
 	inline std::array<FrameResources, gMaxFramesInFlight> gFramesInFlight = {};
 
 	// Initialized at startup and has the same lifetime of the renderer itself.

@@ -94,11 +94,11 @@ namespace Renderer
 
 		// Scene depth creation
 		{
-			Resource::TextureDesc2D depthDesc = Resource::DepthTexture::CreateDesc(
+			Resource::TextureDesc2D depthDesc = Resource::CreateDepthDesc(
 			    Graphics::gSwapchain.width, Graphics::gSwapchain.height, vk::Format::eD32Sfloat
 			);
-			gSceneDepth = Resource::Allocate<Resource::DepthTexture>();
 
+			gSceneDepth = Resource::Allocate<Resource::Texture2D>();
 			Resource::CreateDepthTexture(gSceneDepth, depthDesc);
 		}
 
@@ -429,7 +429,7 @@ namespace Renderer
 
 			// TODO: Make a better way of tracking resources that have any properties bound to the swapchain and make
 			// sure to recreate them along with the swapchain.
-			Resource::ResizeDepthTexture(gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
+			Resource::ResizeTexture(gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
 
 			sShouldRecreateSwapchain = false;
 

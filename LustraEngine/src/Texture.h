@@ -33,30 +33,14 @@ namespace Resource
 	{
 		detail::ImageAllocation allocation = {};
 		vk::ImageView view                 = nullptr;
-
-		TextureDesc2D desc;
-	};
-
-	struct DepthTexture : ResourceTag
-	{
-		detail::ImageAllocation allocation = {};
-		vk::ImageView view                 = nullptr;
+		vk::Sampler sampler                = nullptr;
+		uint32_t bindlessIndex             = UINT32_MAX;
 
 		TextureDesc2D desc;
 
 		operator vk::Image() const
 		{
 			return allocation.image;
-		}
-
-		static TextureDesc2D CreateDesc(uint32_t width, uint32_t height, vk::Format depthFormat)
-		{
-			return TextureDesc2D{
-			    .width  = width,
-			    .height = height,
-			    .format = depthFormat,
-			    .usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment,
-			};
 		}
 	};
 
@@ -67,8 +51,20 @@ namespace Resource
 	);
 	void DestroyTexture2D(Handle<Texture2D> tex);
 
-	void CreateDepthTexture(Handle<DepthTexture> depthTex, const TextureDesc2D& depthDesc);
-	void DestroyDepthTexture(Handle<DepthTexture> depthTex);
-	void ResizeDepthTexture(Handle<DepthTexture> depthTex, uint32_t newWidth, uint32_t newHeight);
+	void CreateDepthTexture(Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc);
+
+	// Agnostic to the underlying usage of the texture. It simply re-uses the same texture desc that was used at
+	// creation with new dimensions.
+	void ResizeTexture(Handle<Texture2D> tex, uint32_t newWidth, uint32_t newHeight);
+
+	inline TextureDesc2D CreateDepthDesc(uint32_t width, uint32_t height, vk::Format depthFormat)
+	{
+		return TextureDesc2D{
+		    .width  = width,
+		    .height = height,
+		    .format = depthFormat,
+		    .usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+		};
+	}
 
 } // namespace Resource

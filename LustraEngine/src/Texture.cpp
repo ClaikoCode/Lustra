@@ -237,7 +237,6 @@ namespace Resource
 		}
 	}
 
-	// TODO: De-duplicate this code by merging depth with texture2d.
 	void DestroyTexture2D(Handle<Texture2D> tex)
 	{
 		Texture2D* texPtr = Get(tex);
@@ -254,61 +253,30 @@ namespace Resource
 		}
 	}
 
-	void CreateDepthTexture(Handle<DepthTexture> depthTex, const TextureDesc2D& depthDesc)
+	void CreateDepthTexture(Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc)
 	{
-		ENSURE(Get(depthTex) != nullptr);
-
 		vk::ImageAspectFlags depthAspect = AspectOf(depthDesc.format);
 		ENSURE_EX(
 		    static_cast<bool>(depthAspect & vk::ImageAspectFlagBits::eDepth),
 		    "Could not get valid depth aspect from format. Check that format is valid."
 		);
 
-		DepthTexture& depthTexture = *Get(depthTex);
-		depthTexture.desc          = depthDesc;
-
-		depthTexture.allocation = AssertVk(AllocateTexture2D(depthDesc));
-
-		const vk::ImageViewCreateInfo depthViewInfo = {
-		    .image            = depthTexture.allocation.image,
-		    .viewType         = vk::ImageViewType::e2D,
-		    .format           = depthDesc.format,
-		    .subresourceRange = {.aspectMask = depthAspect, .levelCount = 1, .layerCount = 1}
-		};
-
-		depthTexture.view =
-		    AssertVk(Graphics::gVkDevice.createImageView(depthViewInfo, Graphics::gAllocationCallbacks));
-	} // namespace Resource
-
-	void DestroyDepthTexture(Handle<DepthTexture> depthTex)
-	{
-		DepthTexture* depthTexturePtr = Get(depthTex);
-		ENSURE(depthTexturePtr != nullptr);
-
-		if (depthTexturePtr->view)
-		{
-			Graphics::gVkDevice.destroyImageView(depthTexturePtr->view, Graphics::gAllocationCallbacks);
-		}
-
-		if (depthTexturePtr->allocation.image)
-		{
-			FreeImageAllocation(depthTexturePtr->allocation);
-		}
+		CreateTexture2D(depthTex, depthDesc);
 	}
 
-	void ResizeDepthTexture(Handle<DepthTexture> depthTex, uint32_t newWidth, uint32_t newHeight)
+	void ResizeTexture(Handle<Texture2D> tex, uint32_t newWidth, uint32_t newHeight)
 	{
-		DepthTexture* depthTexPtr = Get(depthTex);
-		ENSURE(depthTexPtr != nullptr);
+		Texture2D* texPtr = Get(tex);
+		ENSURE(texPtr != nullptr);
 
 		// Destroy the resources at the handle.
-		Resource::DestroyDepthTexture(depthTex);
+		Resource::DestroyTexture2D(tex);
 
 		// Use its own description to fill the new dimenions and create it once again.
-		TextureDesc2D newDesc = depthTexPtr->desc;
+		TextureDesc2D newDesc = texPtr->desc;
 		newDesc.width         = newWidth;
 		newDesc.height        = newHeight;
 
-		Resource::CreateDepthTexture(depthTex, newDesc);
+		Resource::CreateTexture2D(tex, newDesc);
 	}
 } // namespace Resource

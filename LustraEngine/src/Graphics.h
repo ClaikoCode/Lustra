@@ -1,8 +1,8 @@
 #pragma once
 
+#include "BindlessDescriptorPool.h"
 #include "LustraVulkan.h"
 #include "Window.h"
-#include "vma/vk_mem_alloc.h"
 
 #include <cstdint>
 #include <string_view>
@@ -84,6 +84,9 @@ namespace Graphics
 
 	// TODO: Find a better way to solve this.
 	inline const Window* gWindowPtr = nullptr;
+
+	// Bindless pool
+	inline BindlessDescriptorPool gBindlessPool;
 
 	// Creates the Vulkan instance and Vulkan device with several checks on extensions and layers.
 	void SetupVulkan(std::string_view appName, const Window& window);

@@ -2,6 +2,8 @@
 
 #include "LustraLib/Assert.h"
 
+#include <cstddef>
+#include <span>
 #include <unordered_map>
 
 namespace GraphicsUtils
@@ -205,6 +207,68 @@ namespace GraphicsUtils
 		);
 
 		return kFeatureNameTables.at(structType);
+	}
+
+	inline uint32_t Pixel2DTo1D(glm::i32vec2 pixel, uint32_t width)
+	{
+		glm::u32vec2 unsignedPixelPos = pixel;
+		return unsignedPixelPos.x + (unsignedPixelPos.y * width);
+	}
+
+	// Clamped bilinear sampling.
+	// Returns a four wide vector but only samples data matching channel count.
+	// Assumes linear color space.
+	glm::u8vec4 SampleBilinearU8(
+	    std::span<const std::byte> imageData, glm::vec2 uv, uint32_t width, uint32_t height, uint32_t channels
+	)
+	{
+		const uint32_t pixelSizeInBytes = channels * 1u; // Assumes U8 encoding = 1 byte per channel.
+		const glm::i32vec2 maxBounds    = {width - 1, height - 1};
+		const glm::i32vec2 minBounds    = {0, 0};
+
+		const glm::vec2 pixelPos   = uv * glm::vec2({width, height});
+		const glm::vec2 tlPos      = pixelPos - 0.5f;
+		const glm::i32vec2 basePos = glm::floor(tlPos);
+		const glm::vec2 fracs      = tlPos - glm::floor(tlPos);
+
+		// Order: TL, TR, BL, BR
+		std::array<glm::i32vec2, 4> offsets = {{{0, 0}, {1, 0}, {0, 1}, {1, 1}}};
+
+		// Packed weights: x=TL, y=TR, z=BL, w=BR
+		glm::vec4 weights = glm::vec4(
+		    (1.0f - fracs.x) * (1.0f - fracs.y), // TL
+		    fracs.x * (1.0f - fracs.y),          // TR
+		    (1.0f - fracs.x) * fracs.y,          // BL
+		    fracs.x * fracs.y                    // BR
+		);
+
+		// Combination of values happens in floating point space.
+		glm::vec4 combinedColor = {};
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			glm::i32vec2 offset = offsets[i];
+
+			glm::i32vec2 pixel = basePos + offset;
+
+			// Uses clamp sampling
+			pixel = glm::clamp(pixel, minBounds, maxBounds);
+
+			uint32_t pixel1D = Pixel2DTo1D(pixel, width);
+
+			const std::byte* pixelPtr = imageData.data() + (static_cast<size_t>(pixel1D) * pixelSizeInBytes);
+
+			// Only copies the bytes the source uses.
+			glm::u8vec4 texel(0.0f);
+			memcpy(&texel, pixelPtr, pixelSizeInBytes);
+
+			combinedColor += glm::vec4(texel) * weights[static_cast<int>(i)];
+		}
+
+		// Clamp to encoding range.
+		combinedColor = glm::clamp(glm::round(combinedColor), 0.0f, 255.0f);
+
+		// Final cast to input encoding.
+		return glm::u8vec4(combinedColor);
 	}
 
 } // namespace GraphicsUtils

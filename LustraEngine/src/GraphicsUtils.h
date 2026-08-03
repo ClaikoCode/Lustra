@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LustraGLM.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "LustraVulkan.h"
@@ -91,6 +92,10 @@ namespace GraphicsUtils
 	{
 		return timeInSeconds * 1'000'000'000u;
 	}
+
+	glm::u8vec4 SampleBilinearU8(
+	    std::span<const std::byte> imageData, glm::vec2 uv, uint32_t width, uint32_t height, uint32_t channels
+	);
 
 	using FeatureChain = vk::StructureChain<
 	    vk::PhysicalDeviceFeatures2,

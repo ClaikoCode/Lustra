@@ -1,6 +1,7 @@
 #include "ModelImporter.h"
 
 #include "AssetManager.h"
+#include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Logger.h"
 #include "LustraLib/Utils.h"
@@ -700,16 +701,69 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
 				TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
 
-				ENSURE(metalRoughTexArtifact.dims.channels == 4 && occlusionTexArtifact.dims.channels == 4);
+				ENSURE(metalRoughTexArtifact.channels == 4 && occlusionTexArtifact.channels == 4);
 
-				const bool sameDims = (metalRoughTexArtifact.dims.width == occlusionTexArtifact.dims.width) &&
-				                      (metalRoughTexArtifact.dims.height == occlusionTexArtifact.dims.height);
+				// Guaranteed by the spec (unless extensions are used).
+				CHECK(
+				    metalRoughTexArtifact.componentType == ComponentType::U8 &&
+				    occlusionTexArtifact.componentType == ComponentType::U8
+				);
+
+				const bool sameDims = (metalRoughTexArtifact.dims == occlusionTexArtifact.dims);
 
 				if (!sameDims)
 				{
-					PRINT_WARNING("ORM texture dimensions does not match with each other. Using default texture.");
-					texHandle = GetDefaultTexture(Resource::Material::MapType::ORM);
-					// TODO: Implement bilinear sampling and nearest neighbor sampling.
+					PRINT_WARNING(
+					    "ORM texture dimensions does not match with each other. Upscaling smaller tex to "
+					    "fit in the larger one."
+					);
+
+					// For now only supports aspect ratios of 1:1 (square).
+					ENSURE(metalRoughTexArtifact.dims.width == metalRoughTexArtifact.dims.height);
+					ENSURE(occlusionTexArtifact.dims.width == occlusionTexArtifact.dims.height);
+
+					const uint32_t largestDim =
+					    std::max(metalRoughTexArtifact.dims.width, occlusionTexArtifact.dims.width);
+
+					const bool occlusionSmaller = occlusionTexArtifact.dims.width < metalRoughTexArtifact.dims.width;
+					TextureArtifact& largerTex  = occlusionSmaller ? metalRoughTexArtifact : occlusionTexArtifact;
+					const TextureArtifact& smallerTex = occlusionSmaller ? occlusionTexArtifact : metalRoughTexArtifact;
+
+					glm::u8vec4* largerTexPixels = reinterpret_cast<glm::u8vec4*>(largerTex.data.data());
+
+					for (uint32_t y = 0; y < largestDim; y++)
+					{
+						for (uint32_t x = 0; x < largestDim; x++)
+						{
+							// Offset by half a pixel.
+							const glm::vec2 uv = (glm::vec2(x, y) + 0.5f) / static_cast<float>(largestDim);
+
+							const glm::u8vec4 sample = GraphicsUtils::SampleBilinearU8(
+							    smallerTex.data, uv, smallerTex.dims.width, smallerTex.dims.height, smallerTex.channels
+							);
+
+							const uint32_t index1D = x + (y * largestDim);
+
+							// Write to specific channels because spec does not guarantee that textures dont have
+							// overlapping, but redundant, color values.
+							if (occlusionSmaller)
+							{
+								largerTexPixels[index1D].r = sample.r;
+							}
+							else
+							{
+								largerTexPixels[index1D].g = sample.g;
+								largerTexPixels[index1D].b = sample.b;
+							}
+						}
+					}
+
+					texDesc.width     = largerTex.dims.width;
+					texDesc.height    = largerTex.dims.height;
+					texDesc.mipLevels = largerTex.mipCount;
+
+					// Upload the larger one that was written to.
+					ormDataSpan = largerTex.data;
 				}
 				else
 				{
@@ -720,19 +774,9 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 						metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
 					}
 
-					// Guaranteed by the spec (unless extensions are used).
-					CHECK(
-					    metalRoughTexArtifact.componentType == ComponentType::U8 &&
-					    occlusionTexArtifact.componentType == ComponentType::U8
-					);
-
-					texDesc = {
-					    .width     = metalRoughTexArtifact.dims.width,
-					    .height    = metalRoughTexArtifact.dims.height,
-					    .format    = vk::Format::eR8G8B8A8Unorm,
-					    .usage     = vk::ImageUsageFlagBits::eSampled,
-					    .mipLevels = metalRoughTexArtifact.mipCount
-					};
+					texDesc.width     = metalRoughTexArtifact.dims.width;
+					texDesc.height    = metalRoughTexArtifact.dims.height;
+					texDesc.mipLevels = metalRoughTexArtifact.mipCount;
 
 					ormDataSpan = metalRoughTexArtifact.data;
 				}
@@ -770,6 +814,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 	else if (!statics.matCache.contains(matIndex))
 	{
 		const tg3_material& material = statics.tg3Model.materials[matIndex];
+		// TODO: Check for texcoord for the occlusion tex.
 
 		const int32_t normalTexIndex     = material.normal_texture.index;
 		const int32_t emissiveTexIndex   = material.emissive_texture.index;

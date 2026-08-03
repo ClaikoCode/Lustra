@@ -55,7 +55,8 @@ namespace AssetManager
 		{
 			AddModel(
 			    AssetKeyModelTest,
-			    Lustra::Paths::ModelDir() / "Sponza/Sponza.gltf",
+			    // Lustra::Paths::ModelDir() / "Sponza/Sponza.gltf",
+			    Lustra::Paths::ModelDir() / "CarConcept.glb",
 			    Metadata::Model{
 			        .useSkeleton = false,
 			        .useMats     = false,

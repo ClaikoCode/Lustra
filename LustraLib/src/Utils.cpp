@@ -88,4 +88,11 @@ namespace Utils
 
 		return imageBytes;
 	}
+
+	void DumpToFile(std::span<const std::byte> data, const std::filesystem::path& filePath)
+	{
+		std::ofstream fileOut(filePath.c_str(), std::ios::binary);
+
+		fileOut.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+	}
 } // namespace Utils

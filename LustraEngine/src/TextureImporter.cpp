@@ -20,6 +20,7 @@ struct ImageLoadError
 struct ImageDescSTBI
 {
 	ImageData data;
+	uint32_t channels;
 	ImageDimensions dims;
 	ComponentType componentType;
 };
@@ -111,9 +112,8 @@ ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<const std::byte> raw
 	}
 
 	const ImageDimensions dims = {
-	    .width    = static_cast<uint32_t>(x),
-	    .height   = static_cast<uint32_t>(y),
-	    .channels = static_cast<uint32_t>(STBI_rgb_alpha),
+	    .width  = static_cast<uint32_t>(x),
+	    .height = static_cast<uint32_t>(y),
 	};
 
 	size_t bytesPerChannel = 0u;
@@ -132,7 +132,7 @@ ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<const std::byte> raw
 			CHECK_UNREACHABLE();
 	}
 
-	const size_t imageSizeInBytes = bytesPerChannel * dims.channels * dims.height * dims.width;
+	const size_t imageSizeInBytes = bytesPerChannel * STBI_rgb_alpha * dims.height * dims.width;
 
 	ImageDescSTBI imageDescSTBI = {};
 
@@ -143,6 +143,7 @@ ReturnValueSTBI DecodeRawImageBytesWithSTBI(const std::span<const std::byte> raw
 	// Copy over dims and component type.
 	imageDescSTBI.dims          = dims;
 	imageDescSTBI.componentType = imageComponentType;
+	imageDescSTBI.channels      = STBI_rgb_alpha;
 
 	stbi_image_free(decodedImagePtr);
 
@@ -179,6 +180,7 @@ std::optional<TextureArtifact> ImportTextureRaw(
 	outArtifact.data          = std::move(imageDescSTBI.data);
 	outArtifact.componentType = imageDescSTBI.componentType;
 	outArtifact.dims          = imageDescSTBI.dims;
+	outArtifact.channels      = imageDescSTBI.channels;
 
 	// Fill the remaining data.
 	outArtifact.mipCount   = requestedMipCount;

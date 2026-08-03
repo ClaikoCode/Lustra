@@ -2,6 +2,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,7 @@ namespace Utils
 	std::wstring ConvertStringNarrowToWide(const char* narrowString);
 
 	std::expected<std::vector<std::byte>, FileReadCode> ReadFileBytes(const std::filesystem::path& filePath);
+	void DumpToFile(std::span<const std::byte> data, const std::filesystem::path& filePath);
 
 	// This classic hash combine is based on the boost library.
 	inline void HashCombine(std::size_t& seed, std::size_t value)

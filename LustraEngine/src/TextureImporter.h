@@ -29,15 +29,17 @@ using ImageData = std::vector<std::byte>;
 
 struct ImageDimensions
 {
-	uint32_t width    = 0;
-	uint32_t height   = 0;
-	uint32_t channels = 0;
+	uint32_t width  = 0;
+	uint32_t height = 0;
+
+	bool operator==(const ImageDimensions&) const = default;
 };
 
 struct TextureArtifact
 {
 	ImageData data              = {};
 	ImageDimensions dims        = {};
+	uint32_t channels           = 0;
 	ComponentType componentType = ComponentType::Unknown;
 	uint32_t mipCount           = cUnknownMipCount;
 	ColorSpace colorSpace       = ColorSpace::Unknown;

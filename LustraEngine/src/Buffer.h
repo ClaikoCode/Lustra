@@ -27,3 +27,9 @@ void CopyBuffers(AllocatedBuffer& dst, AllocatedBuffer& src, size_t sizeInBytes)
 [[nodiscard]] AllocatedBuffer CreateBufferFromCPUData(
     void* uploadData, size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
 );
+
+// Will check the memory type of dest buffer and choose the appropriate method of uploading the data.
+// Host visible and device local: 	Memcpy through BAR / ReBAR.
+// Device local only: 				Temporary staging buffer with copy command.
+// Host visible only: 				Regular memcpy. Should not be used if the GPU uses the memory frequently.
+void UploadData(const void* data, size_t sizeInBytes, AllocatedBuffer& dst);

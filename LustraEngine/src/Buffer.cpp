@@ -108,12 +108,51 @@ AllocatedBuffer CreateBufferFromCPUData(
 	AllocatedBuffer dstBuffer =
 	    CreateBuffer(sizeInBytes, vk::BufferUsageFlagBits::eTransferDst | usageFlags, allocFlags);
 
-	AllocatedBuffer uploadBuffer = CreateUploadBuffer(uploadData, sizeInBytes);
-
-	CopyBuffers(dstBuffer, uploadBuffer, sizeInBytes);
-
-	// Destroy temporary upload buffer.
-	DestroyBuffer(uploadBuffer);
+	UploadData(uploadData, sizeInBytes, dstBuffer);
 
 	return dstBuffer;
+}
+
+void UploadData(const void* data, size_t sizeInBytes, AllocatedBuffer& dst)
+{
+	vk::MemoryPropertyFlags memPropertyFlags;
+	vmaGetMemoryTypeProperties(
+	    Graphics::gVmaAllocator, dst.info.memoryType, reinterpret_cast<VkMemoryPropertyFlags*>(&memPropertyFlags)
+	);
+
+	bool isDeviceLocal = static_cast<bool>(memPropertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal);
+	bool isHostVisible = static_cast<bool>(memPropertyFlags & vk::MemoryPropertyFlagBits::eHostVisible);
+
+	if (isHostVisible)
+	{
+		if (!isDeviceLocal)
+		{
+			PRINT_WARNING(
+			    "Uploading data to GPU that is not device local. Every GPU read goes through the PCIe lane. If the GPU "
+			    "accesses this data frequently, consider making it local."
+			);
+		}
+
+		memcpy(dst.info.pMappedData, data, sizeInBytes);
+		vmaFlushAllocation(Graphics::gVmaAllocator, dst.alloc, 0, VK_WHOLE_SIZE);
+	}
+	else if (isDeviceLocal)
+	{
+		// Upload buffer
+
+		AllocatedBuffer uploadBuffer = CreateUploadBuffer(data, sizeInBytes);
+
+		CopyBuffers(dst, uploadBuffer, sizeInBytes);
+
+		// Destroy temporary upload buffer.
+		DestroyBuffer(uploadBuffer);
+	}
+	else if (isHostVisible)
+	{
+		// Rare and should hopefully never happen.
+	}
+	else
+	{
+		PRINT_ERROR("Cannot upload data to buffer that is neither host visible or device local.");
+	}
 }

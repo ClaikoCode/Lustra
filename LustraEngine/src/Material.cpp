@@ -4,7 +4,7 @@
 
 namespace Resource
 {
-	void CreateMaterial(Handle<Material> materialHandle, const Material::Properties& props, const Material::Maps& maps)
+	void CreateMaterial(Handle<Material> materialHandle, const MaterialProperties& props, const Material::Maps& maps)
 	{
 		Material& mat = GetRef(materialHandle);
 
@@ -16,9 +16,23 @@ namespace Resource
 	{
 		Material& mat = GetRef(materialHandle);
 
-		Resource::Release(mat.maps.albedo);
-		Resource::Release(mat.maps.emissive);
-		Resource::Release(mat.maps.normal);
-		Resource::Release(mat.maps.orm);
+		Release(mat.maps.albedo);
+		Release(mat.maps.emissive);
+		Release(mat.maps.normal);
+		Release(mat.maps.orm);
+	}
+
+	GPUMaterial FillGPUMaterialStruct(const Material& material)
+	{
+		GPUMaterial gpuMaterial = {};
+
+		gpuMaterial.properties = material.properties;
+
+		gpuMaterial.albedoIndex   = GetRef(material.maps.albedo).bindlessIndex;
+		gpuMaterial.emissiveIndex = GetRef(material.maps.emissive).bindlessIndex;
+		gpuMaterial.normalIndex   = GetRef(material.maps.normal).bindlessIndex;
+		gpuMaterial.ormIndex      = GetRef(material.maps.orm).bindlessIndex;
+
+		return gpuMaterial;
 	}
 } // namespace Resource

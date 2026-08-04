@@ -283,8 +283,8 @@ namespace
 
 		if (defaultMaterial == nullhandle)
 		{
-			const Resource::Material::Properties props = {}; // Default
-			const Resource::Material::Maps maps        = {
+			const Resource::MaterialProperties props = {}; // Default
+			const Resource::Material::Maps maps      = {
 			    .albedo   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Albedo)),
 			    .normal   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Normal)),
 			    .emissive = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Emissive)),
@@ -888,7 +888,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		    .orm = Resource::AddRef(GetORMTextureHandle(occlusionTexIndex, metalRoughTexIndex, statics)),
 		};
 
-		const Resource::Material::Properties props = {
+		const Resource::MaterialProperties props = {
 		    .albedoFactor      = glm::make_vec4(material.pbr_metallic_roughness.base_color_factor),
 		    .emissiveFactor    = glm::make_vec3(material.emissive_factor),
 		    .occlusionStrength = static_cast<float>(material.occlusion_texture.strength),

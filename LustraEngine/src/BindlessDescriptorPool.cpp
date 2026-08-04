@@ -133,6 +133,8 @@ uint32_t BindlessDescriptorPool::RegisterTexture(vk::ImageView view, vk::Sampler
 
 	Graphics::gVkDevice.updateDescriptorSets(write, nullptr);
 
+	PRINT_DEBUG("Registered texture at slot {}", bindlessSlot);
+
 	return bindlessSlot;
 }
 

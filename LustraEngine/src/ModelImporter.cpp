@@ -70,290 +70,343 @@ struct ProcessModelStatics
 	TextureCache& texCache;
 };
 
-// tg3 strings are not null terminated so make sure it is seen as a view.
-// Useful when using for non-UB console output.
-std::string_view tg3StrToStrview(const tg3_str& tg3Str)
+namespace
 {
-	return std::string_view(tg3Str.data, tg3Str.len);
-}
-
-inline glm::mat4 tg3MatToGLMMAt(const double matrix[16])
-{
-	// Explicit converting from a double mat4 to float mat4.
-	return glm::mat4(glm::make_mat4(matrix));
-}
-
-[[nodiscard]] Handle<Resource::Texture2D> GetDefaultTexture(Resource::Material::MapType mapType)
-{
-	static Handle<Resource::Texture2D> defaultAlbedo   = nullhandle;
-	static Handle<Resource::Texture2D> defaultNormal   = nullhandle;
-	static Handle<Resource::Texture2D> defaultEmissive = nullhandle;
-	static Handle<Resource::Texture2D> defaultORM      = nullhandle;
-
-	const uint32_t defaultTexSize   = 256u;
-	const size_t textureSizeInBytes = 4ull * defaultTexSize * defaultTexSize;
-
-	Resource::TextureDesc2D texDesc = {
-	    .width     = defaultTexSize,
-	    .height    = defaultTexSize,
-	    .format    = vk::Format::eUndefined, // Has to be defined per map type.
-	    .usage     = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
-	    .mipLevels = cMaxMipCount
-	};
-
-	Handle<Resource::Texture2D> returnHandle = nullhandle;
-
-	switch (mapType)
+	// tg3 strings are not null terminated so make sure it is seen as a view.
+	// Useful when using for non-UB console output.
+	std::string_view tg3StrToStrview(const tg3_str& tg3Str)
 	{
-		case Resource::Material::MapType::Albedo:
-			if (defaultAlbedo == nullhandle)
+		return std::string_view(tg3Str.data, tg3Str.len);
+	}
+
+	inline glm::mat4 tg3MatToGLMMAt(const double matrix[16])
+	{
+		// Explicit converting from a double mat4 to float mat4.
+		return glm::mat4(glm::make_mat4(matrix));
+	}
+
+	Resource::SamplerDesc tg3SamplerToSamplerDesc(const tg3_sampler& tg3Sampler)
+	{
+		auto tg3WrapToVulkanAddressMode = [&](int32_t wrapAddressMode) -> vk::SamplerAddressMode
+		{
+			switch (wrapAddressMode)
 			{
-				const uint32_t checkerSquareSize = 4u;
+				case TG3_TEXTURE_WRAP_REPEAT:
+					return vk::SamplerAddressMode::eRepeat;
+					break;
+				case TG3_TEXTURE_WRAP_CLAMP_TO_EDGE:
+					return vk::SamplerAddressMode::eClampToEdge;
+					break;
+				case TG3_TEXTURE_WRAP_MIRRORED_REPEAT:
+					return vk::SamplerAddressMode::eMirroredRepeat;
+					break;
+				default:
+					return vk::SamplerAddressMode::eRepeat;
+			};
+		};
 
-				std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(0u));
+		// Min filter also holds the mipmap mode.
+		auto tg3FilterToVulkanMinFilter = [&](int32_t minFilter) -> std::pair<vk::Filter, vk::SamplerMipmapMode>
+		{
+			switch (minFilter)
+			{
+				case TG3_TEXTURE_FILTER_NEAREST:
+					return {vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest};
+				case TG3_TEXTURE_FILTER_LINEAR:
+					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eNearest};
+				case TG3_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST:
+					return {vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest};
+				case TG3_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST:
+					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eNearest};
+				case TG3_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR:
+					return {vk::Filter::eNearest, vk::SamplerMipmapMode::eLinear};
+				case TG3_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR:
+					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear};
+				default:
+					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear};
+			}
+		};
 
-				// Checkered magenta and black albedo texture.
-				for (uint32_t i = 0; i < albedoColors.size(); i += 4u)
+		auto tg3FilterToVulkanMagFilter = [](int32_t magFilter) -> vk::Filter
+		{
+			switch (magFilter)
+			{
+				case TG3_TEXTURE_FILTER_NEAREST:
+					return vk::Filter::eNearest;
+				case TG3_TEXTURE_FILTER_LINEAR:
+					return vk::Filter::eLinear;
+				default:
+					return vk::Filter::eLinear;
+			}
+		};
+
+		auto [minFilter, mipmapMode] = tg3FilterToVulkanMinFilter(tg3Sampler.min_filter);
+
+		Resource::SamplerDesc samplerDesc = {
+		    .magFilter    = tg3FilterToVulkanMagFilter(tg3Sampler.mag_filter),
+		    .minFilter    = minFilter,
+		    .addressModeU = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_s),
+		    .addressModeV = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_t),
+		    .mipmapMode   = mipmapMode,
+		};
+
+		return samplerDesc;
+	} // namespace
+
+	[[nodiscard]] Handle<Resource::Texture2D> GetDefaultTexture(Resource::Material::MapType mapType)
+	{
+		static Handle<Resource::Texture2D> defaultAlbedo   = nullhandle;
+		static Handle<Resource::Texture2D> defaultNormal   = nullhandle;
+		static Handle<Resource::Texture2D> defaultEmissive = nullhandle;
+		static Handle<Resource::Texture2D> defaultORM      = nullhandle;
+
+		const uint32_t defaultTexSize   = 256u;
+		const size_t textureSizeInBytes = 4ull * defaultTexSize * defaultTexSize;
+
+		Resource::TextureDesc2D texDesc = {
+		    .width     = defaultTexSize,
+		    .height    = defaultTexSize,
+		    .format    = vk::Format::eUndefined, // Has to be defined per map type.
+		    .usage     = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+		    .mipLevels = cMaxMipCount
+		};
+
+		Handle<Resource::Texture2D> returnHandle = nullhandle;
+
+		switch (mapType)
+		{
+			case Resource::Material::MapType::Albedo:
+				if (defaultAlbedo == nullhandle)
 				{
-					// Four bytes per pixel
-					const uint32_t pixelIndex = i / 4u;
+					const uint32_t checkerSquareSize = 16u;
 
-					const uint32_t x = pixelIndex % defaultTexSize;
-					const uint32_t y = pixelIndex / defaultTexSize;
+					std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(0u));
 
-					const bool xEvenSquare = (x / checkerSquareSize) % 2 == 0;
-					const bool yEvenSquare = (y / checkerSquareSize) % 2 == 0;
-
-					// 00 = black, 10 = magenta, 01, = magenta, 11 = black
-					const bool writeMagenta = xEvenSquare ^ yEvenSquare;
-
-					if (writeMagenta)
+					// Checkered magenta and black albedo texture.
+					for (uint32_t i = 0; i < albedoColors.size(); i += 4u)
 					{
-						// Color in R and B channel = magenta.
-						albedoColors[i]     = std::byte(255u);
-						albedoColors[i + 2] = std::byte(255u);
+						// Four bytes per pixel
+						const uint32_t pixelIndex = i / 4u;
+
+						const uint32_t x = pixelIndex % defaultTexSize;
+						const uint32_t y = pixelIndex / defaultTexSize;
+
+						const bool xEvenSquare = (x / checkerSquareSize) % 2 == 0;
+						const bool yEvenSquare = (y / checkerSquareSize) % 2 == 0;
+
+						// 00 = black, 10 = magenta, 01, = magenta, 11 = black
+						const bool writeMagenta = xEvenSquare ^ yEvenSquare;
+
+						if (writeMagenta)
+						{
+							// Color in R and B channel = magenta.
+							albedoColors[i]     = std::byte(255u);
+							albedoColors[i + 2] = std::byte(255u);
+						}
+
+						// Alpha
+						albedoColors[i + 3] = std::byte(255u);
 					}
 
-					// Alpha
-					albedoColors[i + 3] = std::byte(255u);
+					defaultAlbedo = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+					texDesc.format = vk::Format::eR8G8B8A8Srgb;
+					Resource::CreateReadOnlyTexture2D(defaultAlbedo, texDesc, albedoColors);
 				}
+				returnHandle = defaultAlbedo;
+				break;
 
-				defaultAlbedo = Resource::AllocateNonOwning<Resource::Texture2D>();
-
-				texDesc.format = vk::Format::eR8G8B8A8Srgb;
-				Resource::CreateReadOnlyTexture2D(defaultAlbedo, texDesc, albedoColors);
-			}
-			returnHandle = defaultAlbedo;
-			break;
-
-		case Resource::Material::MapType::Normal:
-			if (defaultNormal == nullhandle)
-			{
-				std::vector<std::byte> normalColors(textureSizeInBytes);
-
-				// Writes the standard blue where tangent vectors point straight out (0, 0, 1).
-				for (uint32_t i = 0; i < normalColors.size(); i += 4)
+			case Resource::Material::MapType::Normal:
+				if (defaultNormal == nullhandle)
 				{
-					normalColors[i + 0] = std::byte(128u);
-					normalColors[i + 1] = std::byte(128u);
-					normalColors[i + 2] = std::byte(255u);
-					normalColors[i + 3] = std::byte(255u);
+					std::vector<std::byte> normalColors(textureSizeInBytes);
+
+					// Writes the standard blue where tangent vectors point straight out (0, 0, 1).
+					for (uint32_t i = 0; i < normalColors.size(); i += 4)
+					{
+						normalColors[i + 0] = std::byte(128u);
+						normalColors[i + 1] = std::byte(128u);
+						normalColors[i + 2] = std::byte(255u);
+						normalColors[i + 3] = std::byte(255u);
+					}
+
+					defaultNormal = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+					texDesc.format = vk::Format::eR8G8B8A8Unorm;
+					Resource::CreateReadOnlyTexture2D(defaultNormal, texDesc, normalColors);
 				}
+				returnHandle = defaultNormal;
+				break;
 
-				defaultNormal = Resource::AllocateNonOwning<Resource::Texture2D>();
-
-				texDesc.format = vk::Format::eR8G8B8A8Unorm;
-				Resource::CreateReadOnlyTexture2D(defaultNormal, texDesc, normalColors);
-			}
-			returnHandle = defaultNormal;
-			break;
-
-		case Resource::Material::MapType::Emissive:
-			if (defaultEmissive == nullhandle)
-			{
-				// Black by default: no light emission.
-				std::vector<std::byte> emissiveColor(textureSizeInBytes, std::byte(0u));
-
-				// Write alpha so texture is visible.
-				for (uint32_t i = 0; i < emissiveColor.size(); i += 4)
+			case Resource::Material::MapType::Emissive:
+				if (defaultEmissive == nullhandle)
 				{
-					emissiveColor[i + 3] = std::byte(255u);
+					// Black by default: no light emission.
+					std::vector<std::byte> emissiveColor(textureSizeInBytes, std::byte(0u));
+
+					// Write alpha so texture is visible.
+					for (uint32_t i = 0; i < emissiveColor.size(); i += 4)
+					{
+						emissiveColor[i + 3] = std::byte(255u);
+					}
+
+					defaultEmissive = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+					texDesc.format = vk::Format::eR8G8B8A8Srgb;
+					Resource::CreateReadOnlyTexture2D(defaultEmissive, texDesc, emissiveColor);
 				}
+				returnHandle = defaultEmissive;
+				break;
 
-				defaultEmissive = Resource::AllocateNonOwning<Resource::Texture2D>();
+			case Resource::Material::MapType::ORM:
+				if (defaultORM == nullhandle)
+				{
+					// Everything at 1. No occlusion and full alpha.
+					// Let default material properties for roghness and metallic scale their values.
+					std::vector<std::byte> ormColors(textureSizeInBytes, std::byte(255u));
 
-				texDesc.format = vk::Format::eR8G8B8A8Srgb;
-				Resource::CreateReadOnlyTexture2D(defaultEmissive, texDesc, emissiveColor);
-			}
-			returnHandle = defaultEmissive;
-			break;
+					defaultORM = Resource::AllocateNonOwning<Resource::Texture2D>();
 
-		case Resource::Material::MapType::ORM:
-			if (defaultORM == nullhandle)
-			{
-				// Everything at 1. No occlusion and full alpha.
-				// Let default material properties for roghness and metallic scale their values.
-				std::vector<std::byte> ormColors(textureSizeInBytes, std::byte(255u));
-
-				defaultORM = Resource::AllocateNonOwning<Resource::Texture2D>();
-
-				texDesc.format = vk::Format::eR8G8B8A8Unorm;
-				Resource::CreateReadOnlyTexture2D(defaultORM, texDesc, ormColors);
-			}
-			returnHandle = defaultORM;
-			break;
-	}
-
-	return returnHandle;
-};
-
-[[nodiscard]] Handle<Resource::Material> GetDefaultMaterial()
-{
-	static Handle<Resource::Material> defaultMaterial = nullhandle;
-
-	if (defaultMaterial == nullhandle)
-	{
-		const Resource::Material::Properties props = {}; // Default
-		const Resource::Material::Maps maps        = {
-		    .albedo   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Albedo)),
-		    .normal   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Normal)),
-		    .emissive = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Emissive)),
-		    .orm      = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::ORM)),
-		};
-
-		const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
-
-		Resource::CreateMaterial(matHandle, props, maps);
-
-		defaultMaterial = matHandle;
-	}
-
-	return defaultMaterial;
-}
-
-[[nodiscard]] Handle<Model> GetFallbackModel()
-{
-	static Handle<Model> fallbackModel = nullhandle;
-
-	if (fallbackModel == nullhandle)
-	{
-		const float n           = std::numbers::inv_sqrt3_v<float>; // 1/sqrt(3)
-		const glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
-
-		// NOLINTBEGIN(modernize-use-designated-initializers)
-		std::vector<Resource::Vertex> vertices = {
-		    {{-0.5f, -0.5f, 0.5f}, {}, {-n, -n, n}, {}, magenta},   // 0
-		    {{0.5f, -0.5f, 0.5f}, {}, {n, -n, n}, {}, magenta},     // 1
-		    {{-0.5f, 0.5f, 0.5f}, {}, {-n, n, n}, {}, magenta},     // 2
-		    {{0.5f, 0.5f, 0.5f}, {}, {n, n, n}, {}, magenta},       // 3
-		    {{-0.5f, -0.5f, -0.5f}, {}, {-n, -n, -n}, {}, magenta}, // 4
-		    {{0.5f, -0.5f, -0.5f}, {}, {n, -n, -n}, {}, magenta},   // 5
-		    {{-0.5f, 0.5f, -0.5f}, {}, {-n, n, -n}, {}, magenta},   // 6
-		    {{0.5f, 0.5f, -0.5f}, {}, {n, n, -n}, {}, magenta},     // 7
-		};
-		// NOLINTEND(modernize-use-designated-initializers)
-
-		std::vector<uint32_t> indices = {
-		    0, 1, 3, 0, 3, 2, // front  (+z)
-		    5, 4, 6, 5, 6, 7, // back   (-z)
-		    1, 5, 7, 1, 7, 3, // right  (+x)
-		    4, 0, 2, 4, 2, 6, // left   (-x)
-		    2, 3, 7, 2, 7, 6, // top    (+y)
-		    4, 5, 1, 4, 1, 0, // bottom (-y)
-		};
-
-		std::vector<Resource::MeshInstance> instances = {Resource::MeshInstance{
-		    .subMeshes = {Resource::SubMesh{
-		        .range =
-		            {
-		                .startIndex   = 0,
-		                .indexCount   = static_cast<uint32_t>(indices.size()),
-		                .vertexOffset = 0,
-		            },
-		        .mat = Resource::AddRef(GetDefaultMaterial()),
-		    }},
-		    .transform = glm::mat4(1.0f),
-		}};
-
-		fallbackModel = Resource::AllocateNonOwning<Model>();
-		Resource::CreateModel(fallbackModel, std::move(vertices), std::move(indices), std::move(instances));
-
-		PRINT_DEBUG("Created fallback model.");
-	}
-
-	return fallbackModel;
-}
-
-int32_t GetAccessorIndex(const tg3_primitive& prim, std::string_view attributeName)
-{
-	for (uint32_t i = 0; i < prim.attributes_count; i++)
-	{
-		if (tg3StrToStrview(prim.attributes[i].key) == attributeName)
-		{
-			return prim.attributes[i].value;
+					texDesc.format = vk::Format::eR8G8B8A8Unorm;
+					Resource::CreateReadOnlyTexture2D(defaultORM, texDesc, ormColors);
+				}
+				returnHandle = defaultORM;
+				break;
 		}
-	}
 
-	// Could not find the accessor index from primitive.
-	return -1;
-}
+		return returnHandle;
+	};
 
-AttributeIndices GetAttributeIndices(const tg3_primitive& primitive)
-{
-	AttributeIndices atrIndices = {};
-	atrIndices.pos              = GetAccessorIndex(primitive, "POSITION");
-	atrIndices.uv               = GetAccessorIndex(primitive, "TEXCOORD_0");
-	atrIndices.normal           = GetAccessorIndex(primitive, "NORMAL");
-	atrIndices.tangent          = GetAccessorIndex(primitive, "TANGENT");
-	atrIndices.color            = GetAccessorIndex(primitive, "COLOR_0");
-	atrIndices.index            = primitive.indices;
-
-	return atrIndices;
-}
-
-// Goes through all primities of a mesh and sums the POSITION attribute count of each.
-uint64_t MeshVertexCount(const tg3_model& model, const tg3_mesh& mesh)
-{
-	uint64_t vertexCount = 0;
-
-	for (uint32_t i = 0; i < mesh.primitives_count; i++)
+	[[nodiscard]] Handle<Resource::Material> GetDefaultMaterial()
 	{
-		const tg3_primitive& prim = mesh.primitives[i];
+		static Handle<Resource::Material> defaultMaterial = nullhandle;
 
-		const int32_t posIndex = GetAccessorIndex(prim, "POSITION");
-		ENSURE(posIndex != -1);
+		if (defaultMaterial == nullhandle)
+		{
+			const Resource::Material::Properties props = {}; // Default
+			const Resource::Material::Maps maps        = {
+			    .albedo   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Albedo)),
+			    .normal   = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Normal)),
+			    .emissive = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::Emissive)),
+			    .orm      = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::ORM)),
+			};
 
-		vertexCount += model.accessors[posIndex].count;
+			const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
+
+			Resource::CreateMaterial(matHandle, props, maps);
+
+			defaultMaterial = matHandle;
+		}
+
+		return defaultMaterial;
 	}
 
-	return vertexCount;
-}
-
-// Returns data pointer and stride or nullptr and -1 if a fault occurred.
-std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, int32_t accessorIndex)
-{
-	if (accessorIndex == -1)
+	[[nodiscard]] Handle<Model> GetFallbackModel()
 	{
-		return {nullptr, -1};
+		static Handle<Model> fallbackModel = nullhandle;
+
+		if (fallbackModel == nullhandle)
+		{
+			const float n           = std::numbers::inv_sqrt3_v<float>; // 1/sqrt(3)
+			const glm::vec4 magenta = {1.0f, 0.0f, 1.0f, 1.0f};
+
+			// NOLINTBEGIN(modernize-use-designated-initializers)
+			std::vector<Resource::Vertex> vertices = {
+			    {{-0.5f, -0.5f, 0.5f}, {}, {-n, -n, n}, {}, magenta},   // 0
+			    {{0.5f, -0.5f, 0.5f}, {}, {n, -n, n}, {}, magenta},     // 1
+			    {{-0.5f, 0.5f, 0.5f}, {}, {-n, n, n}, {}, magenta},     // 2
+			    {{0.5f, 0.5f, 0.5f}, {}, {n, n, n}, {}, magenta},       // 3
+			    {{-0.5f, -0.5f, -0.5f}, {}, {-n, -n, -n}, {}, magenta}, // 4
+			    {{0.5f, -0.5f, -0.5f}, {}, {n, -n, -n}, {}, magenta},   // 5
+			    {{-0.5f, 0.5f, -0.5f}, {}, {-n, n, -n}, {}, magenta},   // 6
+			    {{0.5f, 0.5f, -0.5f}, {}, {n, n, -n}, {}, magenta},     // 7
+			};
+			// NOLINTEND(modernize-use-designated-initializers)
+
+			std::vector<uint32_t> indices = {
+			    0, 1, 3, 0, 3, 2, // front  (+z)
+			    5, 4, 6, 5, 6, 7, // back   (-z)
+			    1, 5, 7, 1, 7, 3, // right  (+x)
+			    4, 0, 2, 4, 2, 6, // left   (-x)
+			    2, 3, 7, 2, 7, 6, // top    (+y)
+			    4, 5, 1, 4, 1, 0, // bottom (-y)
+			};
+
+			std::vector<Resource::MeshInstance> instances = {Resource::MeshInstance{
+			    .subMeshes = {Resource::SubMesh{
+			        .range =
+			            {
+			                .startIndex   = 0,
+			                .indexCount   = static_cast<uint32_t>(indices.size()),
+			                .vertexOffset = 0,
+			            },
+			        .mat = Resource::AddRef(GetDefaultMaterial()),
+			    }},
+			    .transform = glm::mat4(1.0f),
+			}};
+
+			fallbackModel = Resource::AllocateNonOwning<Model>();
+			Resource::CreateModel(fallbackModel, std::move(vertices), std::move(indices), std::move(instances));
+
+			PRINT_DEBUG("Created fallback model.");
+		}
+
+		return fallbackModel;
 	}
 
-	const tg3_accessor accessor = model.accessors[accessorIndex];
-
-	const int32_t buffViewIndex = accessor.buffer_view;
-	if (buffViewIndex < 0)
+	int32_t GetAccessorIndex(const tg3_primitive& prim, std::string_view attributeName)
 	{
-		return {nullptr, -1};
+		for (uint32_t i = 0; i < prim.attributes_count; i++)
+		{
+			if (tg3StrToStrview(prim.attributes[i].key) == attributeName)
+			{
+				return prim.attributes[i].value;
+			}
+		}
+
+		// Could not find the accessor index from primitive.
+		return -1;
 	}
 
-	const tg3_buffer_view& buffView = model.buffer_views[buffViewIndex];
-	const tg3_buffer& buff          = model.buffers[buffView.buffer];
+	AttributeIndices GetAttributeIndices(const tg3_primitive& primitive)
+	{
+		AttributeIndices atrIndices = {};
+		atrIndices.pos              = GetAccessorIndex(primitive, "POSITION");
+		atrIndices.uv               = GetAccessorIndex(primitive, "TEXCOORD_0");
+		atrIndices.normal           = GetAccessorIndex(primitive, "NORMAL");
+		atrIndices.tangent          = GetAccessorIndex(primitive, "TANGENT");
+		atrIndices.color            = GetAccessorIndex(primitive, "COLOR_0");
+		atrIndices.index            = primitive.indices;
 
-	// Handles tightly packed data (stride = 0)
-	const int32_t stride = tg3_accessor_byte_stride(&accessor, &buffView);
-	ENSURE(stride != -1);
+		return atrIndices;
+	}
 
-	return {buff.data.data + buffView.byte_offset + accessor.byte_offset, stride};
-}
+	// Returns data pointer and stride or nullptr and -1 if a fault occurred.
+	std::pair<const uint8_t*, uint32_t> GetAttributeDataPtr(const tg3_model& model, int32_t accessorIndex)
+	{
+		if (accessorIndex == -1)
+		{
+			return {nullptr, -1};
+		}
+
+		const tg3_accessor accessor = model.accessors[accessorIndex];
+
+		const int32_t buffViewIndex = accessor.buffer_view;
+		if (buffViewIndex < 0)
+		{
+			return {nullptr, -1};
+		}
+
+		const tg3_buffer_view& buffView = model.buffer_views[buffViewIndex];
+		const tg3_buffer& buff          = model.buffers[buffView.buffer];
+
+		// Handles tightly packed data (stride = 0)
+		const int32_t stride = tg3_accessor_byte_stride(&accessor, &buffView);
+		ENSURE(stride != -1);
+
+		return {buff.data.data + buffView.byte_offset + accessor.byte_offset, stride};
+	}
+} // namespace
 
 Resource::PrimitiveRange GetPrimitiveRange(AttributeIndices atrIndicies, ProcessModelStatics& statics)
 {
@@ -580,8 +633,6 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 		else
 		{
 			const TextureArtifact& texArtifact = result.value();
-			const tg3_sampler sampler          = GetSampler(texIndex, statics.tg3Model);
-			UNUSED_VAR(sampler); // TODO: Use sampler.
 
 			vk::Format format = vk::Format::eUndefined;
 			switch (texArtifact.componentType)
@@ -599,12 +650,15 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 					CHECK_UNREACHABLE();
 			}
 
+			const tg3_sampler sampler = GetSampler(texIndex, statics.tg3Model);
+
 			Resource::TextureDesc2D texDesc = {
-			    .width     = texArtifact.dims.width,
-			    .height    = texArtifact.dims.height,
-			    .format    = format,
-			    .usage     = vk::ImageUsageFlagBits::eSampled,
-			    .mipLevels = texArtifact.mipCount
+			    .width       = texArtifact.dims.width,
+			    .height      = texArtifact.dims.height,
+			    .format      = format,
+			    .usage       = vk::ImageUsageFlagBits::eSampled,
+			    .mipLevels   = texArtifact.mipCount,
+			    .samplerDesc = tg3SamplerToSamplerDesc(sampler),
 			};
 
 			texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
@@ -613,6 +667,7 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 
 		statics.texCache.emplace(texKey, texHandle);
 	}
+
 	else
 	{
 		PRINT_DEBUG("Texture cache hit!");
@@ -630,9 +685,9 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 		return GetDefaultTexture(Resource::Material::MapType::ORM);
 	}
 
-	// Takes two int32s and puts them in the two 32 bit parts of a uint64. Initial uint32_t cast to allow index of -1 to
-	// be a valid key. Endianness decides if numbers are put in lower or higher end of those 64 bits, but the unique
-	// number produced is what is essential.
+	// Takes two int32s and puts them in the two 32 bit parts of a uint64. Initial uint32_t cast to allow index of
+	// -1 to be a valid key. Endianness decides if numbers are put in lower or higher end of those 64 bits, but the
+	// unique number produced is what is essential.
 	const uint64_t ormTexKey = (static_cast<uint64_t>(static_cast<uint32_t>(occlusionTexIndex)) << 32) |
 	                           (static_cast<uint64_t>(static_cast<uint32_t>(metalRoughTexIndex)));
 

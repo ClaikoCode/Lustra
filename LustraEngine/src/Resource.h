@@ -81,6 +81,25 @@ struct ResourcePool
 		return aliveObjects;
 	}
 
+	std::vector<Handle<T>> GetAliveHandles()
+	{
+		std::vector<uint32_t> aliveIndices = GetIndicesOfAliveObjects();
+
+		std::vector<Handle<T>> aliveHandles = {};
+		aliveHandles.reserve(aliveIndices.size());
+		for (uint32_t i : aliveIndices)
+		{
+			aliveHandles.push_back(
+			    Handle<T>{
+			        .index      = i,
+			        .generation = pool[i].generation,
+			    }
+			);
+		}
+
+		return aliveHandles;
+	}
+
 	// Manually calls destructors on all allocated slots.
 	// NOTE: Deallocation of GPU resources is done separately.
 	~ResourcePool()
@@ -261,7 +280,7 @@ namespace Resource
 	template <ResourceType T>
 	T* Get(const Handle<T>& handle)
 	{
-		return Resource::PoolInstance<T>().Get(handle);
+		return PoolInstance<T>().Get(handle);
 	}
 
 	// Assumes handle is valid.
@@ -271,11 +290,17 @@ namespace Resource
 		return *Get(handle);
 	}
 
+	template <ResourceType T>
+	std::vector<Handle<T>> GetAliveHandles()
+	{
+		return PoolInstance<T>().GetAliveHandles();
+	}
+
 	// Releases the resource and invalidates the handle.
 	template <ResourceType T>
 	void Release(Handle<T>& handle)
 	{
-		Resource::PoolInstance<T>().Release(handle);
+		PoolInstance<T>().Release(handle);
 
 		// Invalidate handle
 		handle = nullhandle;

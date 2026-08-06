@@ -2,6 +2,7 @@
 
 #include "LustraLib/Logger.h"
 #include "Model.h"
+#include "Sampler.h"
 #include "Shader.h"
 #include "Texture.h"
 
@@ -15,6 +16,7 @@ namespace Resource
 		PoolInstance<Material>().DestroyObjectsGPUMemory(&DestroyMaterial);
 		PoolInstance<Texture2D>().DestroyObjectsGPUMemory(&DestroyTexture2D);
 		PoolInstance<Model>().DestroyObjectsGPUMemory(&DestroyModel);
+		PoolInstance<Sampler2D>().DestroyObjectsGPUMemory(&DestroySampler2D);
 
 		PRINT_LOG("Done.");
 	}

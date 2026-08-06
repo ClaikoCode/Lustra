@@ -6,6 +6,7 @@
 #include "LustraLib/Logger.h"
 #include "LustraLib/Utils.h"
 #include "Resource.h"
+#include "Sampler.h"
 #include "TextureImporter.h"
 #include "glm/gtc/type_ptr.hpp"
 #include "tinygltf/tiny_gltf_v3.h"
@@ -85,7 +86,7 @@ namespace
 		return glm::mat4(glm::make_mat4(matrix));
 	}
 
-	Resource::SamplerDesc tg3SamplerToSamplerDesc(const tg3_sampler& tg3Sampler)
+	Resource::SamplerDesc2D tg3SamplerToSamplerDesc(const tg3_sampler& tg3Sampler)
 	{
 		auto tg3WrapToVulkanAddressMode = [&](int32_t wrapAddressMode) -> vk::SamplerAddressMode
 		{
@@ -141,13 +142,16 @@ namespace
 		};
 
 		auto [minFilter, mipmapMode] = tg3FilterToVulkanMinFilter(tg3Sampler.min_filter);
+		bool usesMipmapMode =
+		    tg3Sampler.min_filter != TG3_TEXTURE_FILTER_NEAREST && tg3Sampler.min_filter != TG3_TEXTURE_FILTER_LINEAR;
 
-		Resource::SamplerDesc samplerDesc = {
-		    .magFilter    = tg3FilterToVulkanMagFilter(tg3Sampler.mag_filter),
-		    .minFilter    = minFilter,
-		    .addressModeU = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_s),
-		    .addressModeV = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_t),
-		    .mipmapMode   = mipmapMode,
+		Resource::SamplerDesc2D samplerDesc = {
+		    .magFilter      = tg3FilterToVulkanMagFilter(tg3Sampler.mag_filter),
+		    .minFilter      = minFilter,
+		    .addressModeU   = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_s),
+		    .addressModeV   = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_t),
+		    .mipmapMode     = mipmapMode,
+		    .usesMipmapMode = usesMipmapMode,
 		};
 
 		return samplerDesc;
@@ -656,14 +660,15 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 			}
 
 			const tg3_sampler sampler = GetSampler(texIndex, statics.tg3Model);
+			auto samplerDesc          = tg3SamplerToSamplerDesc(sampler);
+			UNUSED_VAR(samplerDesc); // TODO: Put sampler instantiation in the correct place of model importing.
 
 			Resource::TextureDesc2D texDesc = {
-			    .width       = texArtifact.dims.width,
-			    .height      = texArtifact.dims.height,
-			    .format      = format,
-			    .usage       = vk::ImageUsageFlagBits::eSampled,
-			    .mipLevels   = texArtifact.mipCount,
-			    .samplerDesc = tg3SamplerToSamplerDesc(sampler),
+			    .width     = texArtifact.dims.width,
+			    .height    = texArtifact.dims.height,
+			    .format    = format,
+			    .usage     = vk::ImageUsageFlagBits::eSampled,
+			    .mipLevels = texArtifact.mipCount,
 			};
 
 			texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();

@@ -18,15 +18,6 @@ namespace detail
 namespace Resource
 {
 
-	struct SamplerDesc
-	{
-		vk::Filter magFilter                = vk::Filter::eLinear;
-		vk::Filter minFilter                = vk::Filter::eLinear;
-		vk::SamplerAddressMode addressModeU = vk::SamplerAddressMode::eRepeat;
-		vk::SamplerAddressMode addressModeV = vk::SamplerAddressMode::eRepeat;
-		vk::SamplerMipmapMode mipmapMode    = vk::SamplerMipmapMode::eLinear;
-	};
-
 	// Not a resource in itself. Simply used to describe a texture concicely.
 	struct TextureDesc2D
 	{
@@ -35,7 +26,6 @@ namespace Resource
 		vk::Format format         = vk::Format::eUndefined;
 		vk::ImageUsageFlags usage = {}; // TODO:move this out and pass it as an argument in functions instead.
 		uint32_t mipLevels        = 1;  // 0 is assumed to be MAX mip levels.
-		SamplerDesc samplerDesc   = {};
 	};
 
 	struct Texture2D : ResourceTag

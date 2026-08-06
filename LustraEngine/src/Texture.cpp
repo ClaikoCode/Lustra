@@ -207,27 +207,6 @@ namespace Resource
 		    .subresourceRange = {.aspectMask = imageAspect, .levelCount = 1, .layerCount = 1}
 		};
 
-		// Fill defaults.
-		// vk::SamplerCreateInfo samplerInfo = {
-		//     .flags                   = {},
-		//     .addressModeW            = vk::SamplerAddressMode::eRepeat, // Unused for 2D textures.
-		//     .mipLodBias              = 0.0f,
-		//     .anisotropyEnable        = vk::False, // TODO: Add options for anisotropy.
-		//     .maxAnisotropy           = 1.0f,
-		//     .compareEnable           = vk::False,
-		//     .minLod                  = 0.0f,
-		//     .maxLod                  = vk::LodClampNone,
-		//     .borderColor             = vk::BorderColor::eFloatTransparentBlack,
-		//     .unnormalizedCoordinates = vk::False,
-		// };
-		//
-		// // Fill arguments.
-		// samplerInfo.addressModeU = texDesc.samplerDesc.addressModeU;
-		// samplerInfo.addressModeV = texDesc.samplerDesc.addressModeV;
-		// samplerInfo.magFilter    = texDesc.samplerDesc.magFilter;
-		// samplerInfo.minFilter    = texDesc.samplerDesc.minFilter;
-		// samplerInfo.mipmapMode   = texDesc.samplerDesc.mipmapMode;
-
 		texture2D.view = AssertVk(Graphics::gVkDevice.createImageView(viewInfo, Graphics::gAllocationCallbacks));
 
 		if (texture2D.desc.usage & vk::ImageUsageFlagBits::eSampled)

@@ -2,6 +2,7 @@
 
 #include "Buffer.h"
 #include "LustraVulkan.h"
+#include "Sampler.h"
 
 #include <stack>
 
@@ -40,7 +41,7 @@ class BindlessDescriptorPool
 
 	vk::DescriptorSet bindlessSet;
 	vk::DescriptorSetLayout descLayout;
-	vk::Sampler defaultSampler;
+	Handle<Resource::Sampler2D> defaultSampler;
 
   private:
 	vk::DescriptorPool m_pool;

@@ -4,6 +4,7 @@
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
+#include "Resource.h"
 
 constexpr uint32_t kMaxDescriptorCount = 4096u;
 
@@ -51,17 +52,17 @@ void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& mat
 
 	// TODO: Delete later.
 	{
-		vk::SamplerCreateInfo si = {
-		    .magFilter    = vk::Filter::eLinear,
-		    .minFilter    = vk::Filter::eLinear,
-		    .mipmapMode   = vk::SamplerMipmapMode::eLinear,
-		    .addressModeU = vk::SamplerAddressMode::eRepeat,
-		    .addressModeV = vk::SamplerAddressMode::eRepeat,
-		    .addressModeW = vk::SamplerAddressMode::eRepeat,
-		    .maxLod       = VK_LOD_CLAMP_NONE,
+		Resource::SamplerDesc2D samplerDesc = {
+		    .magFilter      = vk::Filter::eLinear,
+		    .minFilter      = vk::Filter::eLinear,
+		    .addressModeU   = vk::SamplerAddressMode::eRepeat,
+		    .addressModeV   = vk::SamplerAddressMode::eRepeat,
+		    .mipmapMode     = vk::SamplerMipmapMode::eLinear,
+		    .usesMipmapMode = false,
 		};
 
-		defaultSampler = AssertVk(Graphics::gVkDevice.createSampler(si, Graphics::gAllocationCallbacks));
+		defaultSampler = Resource::Allocate<Resource::Sampler2D>();
+		Resource::CreateSampler(defaultSampler, samplerDesc);
 	}
 
 	// Create layout
@@ -82,7 +83,7 @@ void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& mat
 		    .descriptorType     = vk::DescriptorType::eSampler,
 		    .descriptorCount    = 1,
 		    .stageFlags         = vk::ShaderStageFlagBits::eFragment,
-		    .pImmutableSamplers = &defaultSampler,
+		    .pImmutableSamplers = &Resource::GetRef(defaultSampler).sampler,
 		};
 
 		// Textures. Variable count. MUST stay the highest binding number.
@@ -204,7 +205,8 @@ void BindlessDescriptorPool::Destroy()
 {
 	Graphics::gVkDevice.destroyDescriptorPool(m_pool);
 	Graphics::gVkDevice.destroyDescriptorSetLayout(descLayout);
-	Graphics::gVkDevice.destroySampler(defaultSampler);
+
+	Resource::Release(defaultSampler);
 
 	m_pool     = nullptr;
 	descLayout = nullptr;

@@ -3,7 +3,6 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
-#include "LustraLib/Utils.h"
 #include "Resource.h"
 
 constexpr uint32_t kMaxDescriptorCount = 4096u;
@@ -49,6 +48,7 @@ void SlotAllocator::Free(uint32_t slot)
 void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& matBuffer)
 {
 	m_allocator.Initialize(cap);
+	samplerCache.Initialize();
 
 	// TODO: Delete later.
 	{
@@ -57,12 +57,10 @@ void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& mat
 		    .minFilter      = vk::Filter::eLinear,
 		    .addressModeU   = vk::SamplerAddressMode::eRepeat,
 		    .addressModeV   = vk::SamplerAddressMode::eRepeat,
-		    .mipmapMode     = vk::SamplerMipmapMode::eLinear,
 		    .usesMipmapMode = false,
 		};
 
-		defaultSampler = Resource::Allocate<Resource::Sampler2D>();
-		Resource::CreateSampler(defaultSampler, samplerDesc);
+		defaultSampler = samplerCache.GetOrCreateSampler2D(samplerDesc);
 	}
 
 	// Create layout
@@ -78,7 +76,6 @@ void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& mat
 		};
 
 		bindingLayout[BindingSlotSamplerTemp] = vk::DescriptorSetLayoutBinding{
-		    // immutable sampler — no write needed
 		    .binding            = BindingSlotSamplerTemp,
 		    .descriptorType     = vk::DescriptorType::eSampler,
 		    .descriptorCount    = 1,
@@ -206,7 +203,7 @@ void BindlessDescriptorPool::Destroy()
 	Graphics::gVkDevice.destroyDescriptorPool(m_pool);
 	Graphics::gVkDevice.destroyDescriptorSetLayout(descLayout);
 
-	Resource::Release(defaultSampler);
+	samplerCache.Destroy();
 
 	m_pool     = nullptr;
 	descLayout = nullptr;

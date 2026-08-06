@@ -122,7 +122,6 @@ namespace
 				case TG3_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR:
 					return {vk::Filter::eNearest, vk::SamplerMipmapMode::eLinear};
 				case TG3_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR:
-					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear};
 				default:
 					return {vk::Filter::eLinear, vk::SamplerMipmapMode::eLinear};
 			}
@@ -135,7 +134,6 @@ namespace
 				case TG3_TEXTURE_FILTER_NEAREST:
 					return vk::Filter::eNearest;
 				case TG3_TEXTURE_FILTER_LINEAR:
-					return vk::Filter::eLinear;
 				default:
 					return vk::Filter::eLinear;
 			}
@@ -145,12 +143,19 @@ namespace
 		bool usesMipmapMode =
 		    tg3Sampler.min_filter != TG3_TEXTURE_FILTER_NEAREST && tg3Sampler.min_filter != TG3_TEXTURE_FILTER_LINEAR;
 
+		if (mipmapMode == vk::SamplerMipmapMode::eNearest)
+		{
+			PRINT_WARNING(
+			    "Sampler was requested to use MIPMAP nearest but will be ignored as Lustra decides to use trilinear "
+			    "filtering unless disabled through global settings."
+			);
+		}
+
 		Resource::SamplerDesc2D samplerDesc = {
 		    .magFilter      = tg3FilterToVulkanMagFilter(tg3Sampler.mag_filter),
 		    .minFilter      = minFilter,
 		    .addressModeU   = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_s),
 		    .addressModeV   = tg3WrapToVulkanAddressMode(tg3Sampler.wrap_t),
-		    .mipmapMode     = mipmapMode,
 		    .usesMipmapMode = usesMipmapMode,
 		};
 

@@ -6,9 +6,10 @@
 
 namespace Resource
 {
-	void CreateSampler(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc)
+	void CreateSampler2D(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc)
 	{
 		ENSURE(Get(samplerHandle) != nullptr);
+		constexpr bool kUseMipmapLinear = true; // TODO: Make this a global setting for performance purposes.
 
 		// Fill defaults.
 		vk::SamplerCreateInfo samplerInfo = {
@@ -28,8 +29,9 @@ namespace Resource
 		samplerInfo.addressModeV = desc.addressModeV;
 		samplerInfo.magFilter    = desc.magFilter;
 		samplerInfo.minFilter    = desc.minFilter;
-		samplerInfo.mipmapMode   = desc.mipmapMode;
-		samplerInfo.maxLod       = desc.usesMipmapMode ? vk::LodClampNone : 0.0f;
+		samplerInfo.mipmapMode =
+		    desc.usesMipmapMode && kUseMipmapLinear ? vk::SamplerMipmapMode::eLinear : vk::SamplerMipmapMode::eNearest;
+		samplerInfo.maxLod = desc.usesMipmapMode ? vk::LodClampNone : 0.0f;
 
 		Sampler2D& sampler = GetRef(samplerHandle);
 

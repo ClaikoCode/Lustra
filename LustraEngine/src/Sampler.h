@@ -12,8 +12,7 @@ namespace Resource
 		vk::Filter minFilter                = vk::Filter::eLinear;
 		vk::SamplerAddressMode addressModeU = vk::SamplerAddressMode::eRepeat;
 		vk::SamplerAddressMode addressModeV = vk::SamplerAddressMode::eRepeat;
-		vk::SamplerMipmapMode mipmapMode    = vk::SamplerMipmapMode::eLinear;
-		bool usesMipmapMode                 = true;
+		bool usesMipmapMode                 = true; // Lustra determines how this is interpreted
 	};
 
 	struct Sampler2D : ResourceTag
@@ -23,6 +22,6 @@ namespace Resource
 		vk::Sampler sampler = nullptr;
 	};
 
-	void CreateSampler(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc);
+	void CreateSampler2D(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc);
 	void DestroySampler2D(Handle<Sampler2D> samplerHandle);
 } // namespace Resource

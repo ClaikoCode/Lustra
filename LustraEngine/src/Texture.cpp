@@ -4,6 +4,7 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
+#include "Renderer.h"
 #include "Resource.h"
 
 using namespace detail;
@@ -207,32 +208,32 @@ namespace Resource
 		};
 
 		// Fill defaults.
-		vk::SamplerCreateInfo samplerInfo = {
-		    .flags                   = {},
-		    .addressModeW            = vk::SamplerAddressMode::eRepeat, // Unused for 2D textures.
-		    .mipLodBias              = 0.0f,
-		    .anisotropyEnable        = vk::False, // TODO: Add options for anisotropy.
-		    .maxAnisotropy           = 1.0f,
-		    .compareEnable           = vk::False,
-		    .minLod                  = 0.0f,
-		    .maxLod                  = vk::LodClampNone,
-		    .borderColor             = vk::BorderColor::eFloatTransparentBlack,
-		    .unnormalizedCoordinates = vk::False,
-		};
+		// vk::SamplerCreateInfo samplerInfo = {
+		//     .flags                   = {},
+		//     .addressModeW            = vk::SamplerAddressMode::eRepeat, // Unused for 2D textures.
+		//     .mipLodBias              = 0.0f,
+		//     .anisotropyEnable        = vk::False, // TODO: Add options for anisotropy.
+		//     .maxAnisotropy           = 1.0f,
+		//     .compareEnable           = vk::False,
+		//     .minLod                  = 0.0f,
+		//     .maxLod                  = vk::LodClampNone,
+		//     .borderColor             = vk::BorderColor::eFloatTransparentBlack,
+		//     .unnormalizedCoordinates = vk::False,
+		// };
+		//
+		// // Fill arguments.
+		// samplerInfo.addressModeU = texDesc.samplerDesc.addressModeU;
+		// samplerInfo.addressModeV = texDesc.samplerDesc.addressModeV;
+		// samplerInfo.magFilter    = texDesc.samplerDesc.magFilter;
+		// samplerInfo.minFilter    = texDesc.samplerDesc.minFilter;
+		// samplerInfo.mipmapMode   = texDesc.samplerDesc.mipmapMode;
 
-		// Fill arguments.
-		samplerInfo.addressModeU = texDesc.samplerDesc.addressModeU;
-		samplerInfo.addressModeV = texDesc.samplerDesc.addressModeV;
-		samplerInfo.magFilter    = texDesc.samplerDesc.magFilter;
-		samplerInfo.minFilter    = texDesc.samplerDesc.minFilter;
-		samplerInfo.mipmapMode   = texDesc.samplerDesc.mipmapMode;
-
-		texture2D.view    = AssertVk(Graphics::gVkDevice.createImageView(viewInfo, Graphics::gAllocationCallbacks));
-		texture2D.sampler = AssertVk(Graphics::gVkDevice.createSampler(samplerInfo, Graphics::gAllocationCallbacks));
+		texture2D.view = AssertVk(Graphics::gVkDevice.createImageView(viewInfo, Graphics::gAllocationCallbacks));
 
 		if (texture2D.desc.usage & vk::ImageUsageFlagBits::eSampled)
 		{
-			texture2D.bindlessIndex = Graphics::gBindlessPool.RegisterTexture(texture2D.view, texture2D.sampler);
+			// TODO: Find a better way of solving this pool dependency.
+			texture2D.bindlessIndex = Renderer::gBindlessPool.RegisterTexture(texture2D.view);
 		}
 	} // namespace Resource
 
@@ -272,11 +273,6 @@ namespace Resource
 		if (texPtr->view)
 		{
 			Graphics::gVkDevice.destroyImageView(texPtr->view, Graphics::gAllocationCallbacks);
-		}
-
-		if (texPtr->sampler)
-		{
-			Graphics::gVkDevice.destroySampler(texPtr->sampler, Graphics::gAllocationCallbacks);
 		}
 
 		if (texPtr->allocation.image)

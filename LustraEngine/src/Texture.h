@@ -42,7 +42,6 @@ namespace Resource
 	{
 		detail::ImageAllocation allocation = {};
 		vk::ImageView view                 = nullptr;
-		vk::Sampler sampler                = nullptr;
 		uint32_t bindlessIndex             = UINT32_MAX;
 
 		TextureDesc2D desc;

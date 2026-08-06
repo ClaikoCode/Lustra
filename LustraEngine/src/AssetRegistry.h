@@ -41,7 +41,7 @@ namespace AssetRegistry
 	}
 
 	template <ResourceType T>
-	[[nodiscard]] Handle<T> Resolve(AssetID id)
+	Handle<T> Resolve(AssetID id)
 	{
 		auto& registry = GetRegistry<T>();
 

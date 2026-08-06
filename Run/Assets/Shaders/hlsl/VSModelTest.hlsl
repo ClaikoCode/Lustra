@@ -28,12 +28,13 @@ struct VSOutput
 	float4 pos : SV_Position;
 	float3 worldPos : POSITION0; // pass view-space pos to PS for the normal
 	float4 color : COLOR0;
+	float2 uv : TEXCOORD0;
 };
 
 // Bindings
 [[vk::push_constant]] Push pc;
-[[vk::binding(0, 0)]] ConstantBuffer<FrameConstants> uFrame;      // Collapses to a uniform buffer.
-[[vk::binding(1, 0)]] StructuredBuffer<InstanceData> bTransforms; // Collapses to a read-only storage buffer.
+[[vk::binding(0, 1)]] ConstantBuffer<FrameConstants> uFrame;      // Collapses to a uniform buffer.
+[[vk::binding(1, 1)]] StructuredBuffer<InstanceData> bTransforms; // Collapses to a read-only storage buffer.
 
 VSOutput main(VSInput input)
 {
@@ -45,6 +46,7 @@ VSOutput main(VSInput input)
 	output.pos      = mul(uFrame.proj, mul(uFrame.view, worldPos));
 	output.worldPos = worldPos.xyz; // view-space position for the PS normal
 	output.color    = input.color;
+	output.uv       = input.uv;
 
 	return output;
 }

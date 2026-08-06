@@ -5,7 +5,6 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
-#include "LustraPaths.h"
 #include "Model.h"
 #include "ModelImporter.h"
 #include "Shader.h"
@@ -78,8 +77,9 @@ namespace
 		return vertInputInfo;
 	}
 
-	bool sShouldRecreateSwapchain = false;
-	uint64_t sNextSignalValue     = Renderer::gMaxFramesInFlight + 1;
+	bool sShouldRecreateSwapchain    = false;
+	bool sShouldUpdateMaterialBuffer = false;
+	uint64_t sNextSignalValue        = Renderer::gMaxFramesInFlight + 1;
 
 } // namespace
 
@@ -87,9 +87,15 @@ namespace Renderer
 {
 	void Setup()
 	{
-		// TODO: REMOVE LATER
+		// Misc resources
 		{
-			ImportTexture(Lustra::Paths::ModelDir() / "sample_640×426.hdr", ColorSpace::sRGB);
+			gMaterialStorageBuffer = CreateBuffer(
+			    sizeof(Resource::GPUMaterial) * gMaxMaterials,
+			    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+			    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
+			);
+
+			gBindlessPool.Initialize(1024, gMaterialStorageBuffer);
 		}
 
 		// Scene depth creation
@@ -266,14 +272,14 @@ namespace Renderer
 			vk::DescriptorSetLayoutCreateInfo descSetLayoutInfo = {};
 			descSetLayoutInfo.setBindings(bindings);
 
-			gStaticDescriptorsLayout = AssertVk(
+			gPerFrameDescLayout = AssertVk(
 			    Graphics::gVkDevice.createDescriptorSetLayout(descSetLayoutInfo, Graphics::gAllocationCallbacks)
 			);
 
 			// Allocate and write descriptor sets
 			{
 				std::array<vk::DescriptorSetLayout, gMaxFramesInFlight> layouts = {};
-				layouts.fill(gStaticDescriptorsLayout); // Same layout for each set to be allocated.
+				layouts.fill(gPerFrameDescLayout); // Same layout for each set to be allocated.
 
 				vk::DescriptorSetAllocateInfo setAllocInfo = {};
 				setAllocInfo.setDescriptorPool(gStaticDescriptorPool);
@@ -321,18 +327,26 @@ namespace Renderer
 				}
 			}
 
-			const vk::PushConstantRange pcRange = {
-			    .stageFlags = vk::ShaderStageFlagBits::eVertex,
-			    .offset     = 0,
-			    .size       = sizeof(uint32_t) // Must be a multiple of 4
+			const std::array pcRanges = {
+			    vk::PushConstantRange{
+			        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+			        .offset     = 0,
+			        .size       = sizeof(uint32_t) // transform index
+			    },
+
+			    vk::PushConstantRange{
+			        .stageFlags = vk::ShaderStageFlagBits::eFragment,
+			        .offset     = sizeof(uint32_t),
+			        .size       = sizeof(uint32_t) // material index
+			    },
 			};
 
 			// This order must match the set indices inside shaders layout(set = i).
-			const std::array setLayouts = {gStaticDescriptorsLayout};
+			const std::array setLayouts = {gBindlessPool.descLayout, gPerFrameDescLayout};
 
 			pipelineLayoutInfo = {};
 			pipelineLayoutInfo.setSetLayouts(setLayouts);
-			pipelineLayoutInfo.setPushConstantRanges(pcRange);
+			pipelineLayoutInfo.setPushConstantRanges(pcRanges);
 
 			gModelTestPipelineLayout =
 			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
@@ -373,6 +387,12 @@ namespace Renderer
 				    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
 			}
 		}
+
+		// TODO: REMOVE LATER
+		{
+			AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
+			sShouldUpdateMaterialBuffer = true;
+		}
 	} // namespace Renderer
 
 	void Destroy()
@@ -380,13 +400,16 @@ namespace Renderer
 		// Release all internal resources. Resource pools will clear themselves elsewere.
 		Resource::Release(gSceneDepth);
 
+		DestroyBuffer(gMaterialStorageBuffer);
+		gBindlessPool.Destroy();
+
 		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gHelloTrianglePipelineLayout, Graphics::gAllocationCallbacks);
 
 		Graphics::gVkDevice.destroy(gModelTestPipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gModelTestPipelineLayout, Graphics::gAllocationCallbacks);
-		Graphics::gVkDevice.destroy(gStaticDescriptorsLayout, Graphics::gAllocationCallbacks);
+		Graphics::gVkDevice.destroy(gPerFrameDescLayout, Graphics::gAllocationCallbacks);
 
 		// Also takes care of all allocated descriptor sets.
 		Graphics::gVkDevice.destroy(gStaticDescriptorPool);
@@ -412,8 +435,32 @@ namespace Renderer
 			Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
 			modelInstances.push_back({
 			    .modelHandle = modelTest,
-			    .worldMatrix = glm::mat4(1.0f),
+			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)),
 			});
+		}
+
+		if (sShouldUpdateMaterialBuffer)
+		{
+			static std::array<Resource::GPUMaterial, gMaxMaterials> gpuMats = {};
+
+			const std::vector<Handle<Resource::Material>> materialHandles =
+			    Resource::GetAliveHandles<Resource::Material>();
+
+			for (Handle<Resource::Material> matHandle : materialHandles)
+			{
+				const Resource::Material& mat = Resource::GetRef(matHandle);
+
+				gpuMats[matHandle.index] = Resource::FillGPUMaterialStruct(mat);
+			}
+
+			// Wait before uploading to ensure any frames in flights are guaranteed to be done using their materials.
+			Graphics::WaitForDevice();
+
+			UploadData(gpuMats.data(), gpuMats.size() * sizeof(Resource::GPUMaterial), gMaterialStorageBuffer);
+
+			PRINT_DEBUG("Updated material buffer.");
+
+			sShouldUpdateMaterialBuffer = false;
 		}
 
 		if (sShouldRecreateSwapchain)
@@ -485,12 +532,12 @@ namespace Renderer
 				FrameConstants fc = {};
 
 				const float angle  = t * glm::radians(45.0f); // 45 deg/sec orbit
-				const float radius = 5.0f;                    // distance from the model
+				const float radius = 10.0f;                   // distance from the model
 
 				// A camera sitting back on + Z, looking at the origin.
 				const glm::vec3 eye = {
 				    radius * std::sin(angle),
-				    0.0f,
+				    5.0f,
 				    radius * std::cos(angle),
 				};
 				const glm::vec3 center = {0.0f, 0.0f, 0.0f};
@@ -668,7 +715,11 @@ namespace Renderer
 
 				const vk::PipelineLayout currentLayout = gModelTestPipelineLayout;
 				commandBuffer.bindDescriptorSets(
-				    vk::PipelineBindPoint::eGraphics, currentLayout, 0, frameResources.agnosticConstantsSet, {}
+				    vk::PipelineBindPoint::eGraphics,
+				    currentLayout,
+				    0,
+				    {gBindlessPool.bindlessSet, frameResources.agnosticConstantsSet},
+				    {}
 				);
 
 				uint32_t baseTransformIndex = 0;
@@ -683,19 +734,23 @@ namespace Renderer
 					);
 
 					// Go through all mesh instances.
-					for (uint32_t i = 0; i < model.instances.size(); i++)
+					for (uint32_t instanceIndex = 0; instanceIndex < model.instances.size(); instanceIndex++)
 					{
-						const uint32_t transformIndex = baseTransformIndex + i;
+						const uint32_t transformIndex = baseTransformIndex + instanceIndex;
 						// Push the transform index per mesh instance.
 						commandBuffer.pushConstants<uint32_t>(
 						    currentLayout, vk::ShaderStageFlagBits::eVertex, 0, transformIndex
 						);
 
-						for (const Resource::SubMesh& submesh : model.instances[i].subMeshes)
+						const auto& subMeshes = model.instances[instanceIndex].subMeshes;
+						for (const auto& submesh : subMeshes)
 						{
 							const Resource::PrimitiveRange& range = submesh.range;
 
-							// TODO: Push material index?
+							// Push material index per submesh.
+							commandBuffer.pushConstants<uint32_t>(
+							    currentLayout, vk::ShaderStageFlagBits::eFragment, sizeof(uint32_t), submesh.mat.index
+							);
 
 							commandBuffer.drawIndexed(range.indexCount, 1, range.startIndex, range.vertexOffset, 0);
 						}
@@ -742,11 +797,13 @@ namespace Renderer
 
 			// We have the index for which swapchain image we are going to write to but now we have to wait for the
 			// image at that index to actually be available. This semaphore is tied to the swapchain image so as
-			// soon as the image at the index that was given to prior can be written to, a signal is sent. NOTE:
+			// soon as the image at the index that was given to prior can be written to, a signal is sent.
+			// NOTE:
 			// This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
 			// semaphore to be signaled at the point of trying to bind the image for color output in the pipeline.
 			// Earlier pipeline stages are free to run.
-			// TODO: Work should be split into different command buffers because this wait waits on the FIRST
+			// TODO:
+			// Work should be split into different command buffers because this wait waits on the FIRST
 			// instance of color output attachement, even if the target is not the swapchain. This wait should only
 			// be for the command buffer that has commands that will write to the swapchain, all other kind of work
 			// should be separate to avoid unecessary GPU stalls.
@@ -756,14 +813,12 @@ namespace Renderer
 
 			const std::array semaphoreSignals = {
 			    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once
-			    // all
-			    // GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
+			    // all GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
 			    vk::SemaphoreSubmitInfo{
 			        .semaphore = renderingCompleteSemaphore, .stageMask = vk::PipelineStageFlagBits2::eAllGraphics
 			    },
 			    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames
-			    // signal
-			    // value to finally communicate that all resources associated with this frame has been completed.
+			    // signal value to finally communicate that all resources associated with this frame has been completed.
 			    vk::SemaphoreSubmitInfo{
 			        .semaphore = gTimelineSemaphore,
 			        .value     = signalValue,

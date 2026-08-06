@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BindlessDescriptorPool.h"
 #include "Buffer.h"
 #include "LustraGLM.h"
 #include "LustraVulkan.h"
@@ -25,6 +26,7 @@ namespace Renderer
 		vk::CommandBuffer commandBuffer      = nullptr; // Will be destroyed with command pool
 		vk::Semaphore imageAcquiredSemaphore = nullptr; // Binary semaphore
 
+		// TODO: Find a better way to use this storage buffer without relying on BAR to be fully supported.
 		AllocatedBuffer instanceTransformBuffer;
 		AllocatedBuffer frameConstantsBuffer;
 
@@ -41,7 +43,8 @@ namespace Renderer
 
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
-	constexpr uint32_t gMaxMeshes = 4096u;
+	constexpr uint32_t gMaxMeshes    = 4096u;
+	constexpr uint32_t gMaxMaterials = 1024u;
 
 	inline Handle<Resource::Texture2D> gSceneDepth;
 	inline std::array<FrameResources, gMaxFramesInFlight> gFramesInFlight = {};
@@ -54,11 +57,14 @@ namespace Renderer
 
 	inline vk::PipelineLayout gModelTestPipelineLayout;
 	inline vk::Pipeline gModelTestPipeline;
-	inline vk::DescriptorSetLayout gStaticDescriptorsLayout;
+	inline vk::DescriptorSetLayout gPerFrameDescLayout;
 
 	inline vk::Semaphore gTimelineSemaphore;
 
 	inline uint32_t gFrameIndex = 0u;
+
+	inline BindlessDescriptorPool gBindlessPool;
+	inline AllocatedBuffer gMaterialStorageBuffer;
 
 	void Setup();
 	void Destroy();

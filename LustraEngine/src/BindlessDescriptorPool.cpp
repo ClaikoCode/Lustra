@@ -3,6 +3,7 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
+#include "LustraLib/Utils.h"
 
 constexpr uint32_t kMaxDescriptorCount = 4096u;
 
@@ -44,53 +45,97 @@ void SlotAllocator::Free(uint32_t slot)
 	freeSlots.push(slot);
 }
 
-void BindlessDescriptorPool::Initialize(uint32_t cap)
+void BindlessDescriptorPool::Initialize(uint32_t cap, const AllocatedBuffer& matBuffer)
 {
 	m_allocator.Initialize(cap);
 
-	// Create layout
+	// TODO: Delete later.
 	{
-		const vk::DescriptorSetLayoutBinding bindingLayout = {
-		    .binding         = kTextureBinding,
-		    .descriptorType  = vk::DescriptorType::eCombinedImageSampler, // Might separate in the future.
-		    .descriptorCount = kMaxDescriptorCount,
-		    .stageFlags      = vk::ShaderStageFlagBits::eAll
+		vk::SamplerCreateInfo si = {
+		    .magFilter    = vk::Filter::eLinear,
+		    .minFilter    = vk::Filter::eLinear,
+		    .mipmapMode   = vk::SamplerMipmapMode::eLinear,
+		    .addressModeU = vk::SamplerAddressMode::eRepeat,
+		    .addressModeV = vk::SamplerAddressMode::eRepeat,
+		    .addressModeW = vk::SamplerAddressMode::eRepeat,
+		    .maxLod       = VK_LOD_CLAMP_NONE,
 		};
 
-		// Three flags to mark bindless.
+		defaultSampler = AssertVk(Graphics::gVkDevice.createSampler(si, Graphics::gAllocationCallbacks));
+	}
+
+	// Create layout
+	{
+		std::array<vk::DescriptorSetLayoutBinding, BindingSlotCount> bindingLayout = {};
+
+		// Material storage buffer. Single, fixed-size.
+		bindingLayout[BindingSlotMaterialBuffer] = vk::DescriptorSetLayoutBinding{
+		    .binding         = BindingSlotMaterialBuffer,
+		    .descriptorType  = vk::DescriptorType::eStorageBuffer,
+		    .descriptorCount = 1,
+		    .stageFlags      = vk::ShaderStageFlagBits::eFragment,
+		};
+
+		bindingLayout[BindingSlotSamplerTemp] = vk::DescriptorSetLayoutBinding{
+		    // immutable sampler — no write needed
+		    .binding            = BindingSlotSamplerTemp,
+		    .descriptorType     = vk::DescriptorType::eSampler,
+		    .descriptorCount    = 1,
+		    .stageFlags         = vk::ShaderStageFlagBits::eFragment,
+		    .pImmutableSamplers = &defaultSampler,
+		};
+
+		// Textures. Variable count. MUST stay the highest binding number.
+		bindingLayout[BindingSlotTextures] = vk::DescriptorSetLayoutBinding{
+		    .binding         = BindingSlotTextures,
+		    .descriptorType  = vk::DescriptorType::eSampledImage,
+		    .descriptorCount = kMaxDescriptorCount,
+		    .stageFlags      = vk::ShaderStageFlagBits::eFragment,
+		};
+
+		// One flag entry per binding, in the same order as bindingLayout.
 		// Partially bound allows for empty slots to be valid.
 		// Variable descriptor count lets the actual allocation SET AT RUNTIME to be different size smaller than the
 		// max. Requires CountAllocateInfo struct to be passed for the pNext field of the allocate info struct.
-		const vk::DescriptorBindingFlags flags = vk::DescriptorBindingFlagBits::eUpdateAfterBind |
-		                                         vk::DescriptorBindingFlagBits::ePartiallyBound |
-		                                         vk::DescriptorBindingFlagBits::eVariableDescriptorCountEXT;
+		std::array<vk::DescriptorBindingFlags, BindingSlotCount> flags = {};
+		flags[BindingSlotTextures] =
+		    vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eVariableDescriptorCountEXT;
 
 		vk::DescriptorSetLayoutBindingFlagsCreateInfo flagInfo = {};
 		flagInfo.setBindingFlags(flags);
 
 		vk::DescriptorSetLayoutCreateInfo descLayoutInfo = {
 		    .pNext = &flagInfo,
-		    .flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
 		};
 		descLayoutInfo.setBindings(bindingLayout);
 
-		m_descLayout =
+		descLayout =
 		    AssertVk(Graphics::gVkDevice.createDescriptorSetLayout(descLayoutInfo, Graphics::gAllocationCallbacks));
 	}
 
 	// Create pool
 	{
-		vk::DescriptorPoolSize poolSize = {
-		    .type            = vk::DescriptorType::eCombinedImageSampler,
+		std::array<vk::DescriptorPoolSize, BindingSlotCount> poolSizes = {};
+
+		poolSizes[BindingSlotMaterialBuffer] = vk::DescriptorPoolSize{
+		    .type            = vk::DescriptorType::eStorageBuffer,
+		    .descriptorCount = 1,
+		};
+
+		poolSizes[BindingSlotSamplerTemp] = vk::DescriptorPoolSize{
+		    .type            = vk::DescriptorType::eSampler,
+		    .descriptorCount = 1,
+		};
+
+		poolSizes[BindingSlotTextures] = vk::DescriptorPoolSize{
+		    .type            = vk::DescriptorType::eSampledImage,
 		    .descriptorCount = kMaxDescriptorCount,
 		};
 
-		// Only a single set.
 		vk::DescriptorPoolCreateInfo poolInfo = {
-		    .flags   = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind,
-		    .maxSets = 1,
+		    .maxSets = 1, // Only a single set.
 		};
-		poolInfo.setPoolSizes(poolSize);
+		poolInfo.setPoolSizes(poolSizes);
 
 		m_pool = AssertVk(Graphics::gVkDevice.createDescriptorPool(poolInfo, Graphics::gAllocationCallbacks));
 	}
@@ -106,30 +151,47 @@ void BindlessDescriptorPool::Initialize(uint32_t cap)
 		    .pNext          = &countInfo,
 		    .descriptorPool = m_pool,
 		};
-		descAllocInfo.setSetLayouts(m_descLayout);
+		descAllocInfo.setSetLayouts(descLayout);
 
-		m_bindlessSet = AssertVk(Graphics::gVkDevice.allocateDescriptorSets(descAllocInfo))[0];
+		bindlessSet = AssertVk(Graphics::gVkDevice.allocateDescriptorSets(descAllocInfo))[0];
+	}
+
+	// Write the material storage buffer into its binding.
+	{
+		const vk::DescriptorBufferInfo bufferInfo = {
+		    .buffer = matBuffer.buffer,
+		    .offset = 0,
+		    .range  = VK_WHOLE_SIZE,
+		};
+
+		vk::WriteDescriptorSet write = {
+		    .dstSet          = bindlessSet,
+		    .dstBinding      = BindingSlotMaterialBuffer,
+		    .dstArrayElement = 0,
+		    .descriptorType  = vk::DescriptorType::eStorageBuffer,
+		};
+		write.setBufferInfo(bufferInfo); // Sets descriptorCount = 1 and pBufferInfo.
+
+		Graphics::gVkDevice.updateDescriptorSets(write, {});
 	}
 }
 
-uint32_t BindlessDescriptorPool::RegisterTexture(vk::ImageView view, vk::Sampler sampler)
+uint32_t BindlessDescriptorPool::RegisterTexture(vk::ImageView view)
 {
 	const uint32_t bindlessSlot = m_allocator.Allocate();
 
 	vk::DescriptorImageInfo imageInfo = {
-	    .sampler     = sampler,
 	    .imageView   = view,
 	    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 	};
 
 	vk::WriteDescriptorSet write = {
-	    .dstSet          = m_bindlessSet,
-	    .dstBinding      = kTextureBinding,
+	    .dstSet          = bindlessSet,
+	    .dstBinding      = BindingSlotTextures,
 	    .dstArrayElement = bindlessSlot,
-	    .descriptorCount = 1,
-	    .descriptorType  = vk::DescriptorType::eCombinedImageSampler,
-	    .pImageInfo      = &imageInfo,
+	    .descriptorType  = vk::DescriptorType::eSampledImage,
 	};
+	write.setImageInfo(imageInfo);
 
 	Graphics::gVkDevice.updateDescriptorSets(write, nullptr);
 
@@ -141,8 +203,9 @@ uint32_t BindlessDescriptorPool::RegisterTexture(vk::ImageView view, vk::Sampler
 void BindlessDescriptorPool::Destroy()
 {
 	Graphics::gVkDevice.destroyDescriptorPool(m_pool);
-	Graphics::gVkDevice.destroyDescriptorSetLayout(m_descLayout);
+	Graphics::gVkDevice.destroyDescriptorSetLayout(descLayout);
+	Graphics::gVkDevice.destroySampler(defaultSampler);
 
-	m_pool       = nullptr;
-	m_descLayout = nullptr;
+	m_pool     = nullptr;
+	descLayout = nullptr;
 }

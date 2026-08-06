@@ -168,21 +168,11 @@ namespace Graphics
 		SetupVMA();
 		SetupSurface(window);
 		CreateSwapchain(window);
-
-		// Misc resources
-		{
-			gBindlessPool.Initialize(1024);
-		}
 	}
 
 	void TearDownVulkan()
 	{
 		PRINT_DEBUG("Tearing down Vulkan.");
-
-		// Misc resources
-		{
-			gBindlessPool.Destroy();
-		}
 
 		gVkDevice.destroyCommandPool(gTransferPool, gAllocationCallbacks);
 
@@ -352,7 +342,8 @@ namespace Graphics
 		    .setBufferDeviceAddress(VK_TRUE)
 		    .setDescriptorBindingSampledImageUpdateAfterBind(VK_TRUE)
 		    .setDescriptorBindingPartiallyBound(VK_TRUE)
-		    .setDescriptorBindingVariableDescriptorCount(VK_TRUE);
+		    .setDescriptorBindingVariableDescriptorCount(VK_TRUE)
+		    .setRuntimeDescriptorArray(VK_TRUE);
 
 		requestedFeatureChain.get<vk::PhysicalDeviceVulkan13Features>()
 		    .setSynchronization2(VK_TRUE)

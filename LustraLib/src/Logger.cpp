@@ -58,10 +58,10 @@ namespace LustraLib
 				    outputFile,
 				    "[{}] ({} -> {}:{}): {}\n",
 				    outputLevelString,
-				    funcName.data(),
-				    fileName.data(),
+				    funcName,
+				    fileName,
 				    line,
-				    formattedMessage.data()
+				    formattedMessage
 				);
 			}
 		}

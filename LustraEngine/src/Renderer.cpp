@@ -7,6 +7,7 @@
 #include "LustraLib/Assert.h"
 #include "Model.h"
 #include "ModelImporter.h"
+#include "Sampler.h"
 #include "Shader.h"
 #include "ShaderImporter.h"
 #include "TextureImporter.h"
@@ -78,25 +79,234 @@ namespace
 	}
 
 	bool sShouldRecreateSwapchain    = false;
-	bool sShouldUpdateMaterialBuffer = false;
+	bool sShouldUpdateMaterialBuffer = true;
+	bool sShouldUpdateSamplers       = true;
+	bool sShouldUpdateTextures       = true;
 	uint64_t sNextSignalValue        = Renderer::gMaxFramesInFlight + 1;
 
 } // namespace
 
 namespace Renderer
 {
+	void CreateBindlessResources(BindlessResources& bindlessResources)
+	{
+		bindlessResources.samplerCache.Initialize();
+
+		bindlessResources.materialStorageBuffer = CreateBuffer(
+		    sizeof(Resource::GPUMaterial) * BindlessResources::kMaxMaterials,
+		    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+		    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
+		);
+
+		// Create pool
+		{
+			std::array<vk::DescriptorPoolSize, BindlessResources::BindSlotCount> sizes = {};
+
+			sizes[BindlessResources::BindSlotMaterials] = {
+			    .type            = vk::DescriptorType::eStorageBuffer,
+			    .descriptorCount = 1,
+			};
+
+			sizes[BindlessResources::BindSlotSamplers] = {
+			    .type            = vk::DescriptorType::eSampler,
+			    .descriptorCount = BindlessResources::kMaxSamplers,
+			};
+
+			sizes[BindlessResources::BindSlotTextures] = {
+			    .type            = vk::DescriptorType::eSampledImage,
+			    .descriptorCount = BindlessResources::kMaxTextureDescs,
+			};
+
+			vk::DescriptorPoolCreateInfo poolInfo = {
+			    .maxSets = 1,
+			};
+			poolInfo.setPoolSizes(sizes);
+
+			bindlessResources.descriptorPool =
+			    AssertVk(Graphics::gVkDevice.createDescriptorPool(poolInfo, Graphics::gAllocationCallbacks));
+		}
+
+		// Desc set layout
+		{
+			std::array<vk::DescriptorSetLayoutBinding, BindlessResources::BindSlotCount> bindings = {};
+
+			bindings[BindlessResources::BindSlotMaterials] = {
+			    .binding         = BindlessResources::BindSlotMaterials,
+			    .descriptorType  = vk::DescriptorType::eStorageBuffer,
+			    .descriptorCount = 1,
+			    .stageFlags      = vk::ShaderStageFlagBits::eFragment,
+			};
+
+			bindings[BindlessResources::BindSlotSamplers] = {
+			    .binding         = BindlessResources::BindSlotSamplers,
+			    .descriptorType  = vk::DescriptorType::eSampler,
+			    .descriptorCount = BindlessResources::kMaxSamplers,
+			    .stageFlags      = vk::ShaderStageFlagBits::eFragment,
+			};
+
+			bindings[BindlessResources::BindSlotTextures] = {
+			    .binding         = BindlessResources::BindSlotTextures,
+			    .descriptorType  = vk::DescriptorType::eSampledImage,
+			    .descriptorCount = BindlessResources::kMaxTextureDescs,
+			    .stageFlags      = vk::ShaderStageFlagBits::eFragment,
+			};
+
+			std::array<vk::DescriptorBindingFlags, BindlessResources::BindSlotCount> flags = {};
+
+			// Allow for empty descriptors.
+			flags[BindlessResources::BindSlotTextures] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+			flags[BindlessResources::BindSlotSamplers] = vk::DescriptorBindingFlagBits::ePartiallyBound;
+
+			vk::DescriptorSetLayoutBindingFlagsCreateInfo flagInfo = {};
+			flagInfo.setBindingFlags(flags);
+
+			vk::DescriptorSetLayoutCreateInfo descLayoutInfo = {.pNext = &flagInfo};
+			descLayoutInfo.setBindings(bindings);
+
+			bindlessResources.layout =
+			    AssertVk(Graphics::gVkDevice.createDescriptorSetLayout(descLayoutInfo, Graphics::gAllocationCallbacks));
+		}
+
+		// Allocate
+		{
+			vk::DescriptorSetAllocateInfo allocInfo = {
+			    .descriptorPool = bindlessResources.descriptorPool,
+			};
+			allocInfo.setSetLayouts(bindlessResources.layout);
+
+			bindlessResources.set = AssertVk(Graphics::gVkDevice.allocateDescriptorSets(allocInfo))[0];
+		}
+
+		// Write material buffer descriptor
+		{
+			vk::DescriptorBufferInfo buffInfo = {
+			    .buffer = bindlessResources.materialStorageBuffer.buffer,
+			    .offset = 0,
+			    .range  = vk::WholeSize,
+			};
+
+			vk::WriteDescriptorSet write = {
+			    .dstSet          = bindlessResources.set,
+			    .dstBinding      = BindlessResources::BindSlotMaterials,
+			    .dstArrayElement = 0,
+			    .descriptorCount = 1,
+			    .descriptorType  = vk::DescriptorType::eStorageBuffer,
+			    .pBufferInfo     = &buffInfo,
+			};
+
+			Graphics::gVkDevice.updateDescriptorSets(write, nullptr);
+		}
+	}
+
+	void DestroyBindlessResources(BindlessResources& bindlessResources)
+	{
+		Graphics::gVkDevice.destroy(bindlessResources.descriptorPool, Graphics::gAllocationCallbacks);
+		Graphics::gVkDevice.destroy(bindlessResources.layout, Graphics::gAllocationCallbacks);
+
+		DestroyBuffer(bindlessResources.materialStorageBuffer);
+
+		bindlessResources.samplerCache.Destroy();
+	}
+
+	void UpdateMaterialBuffer(BindlessResources& bindlessResources)
+	{
+		const std::vector<Handle<Resource::Material>> materialHandles = Resource::GetAliveHandles<Resource::Material>();
+
+		std::vector<Resource::GPUMaterial> gpuMats(BindlessResources::kMaxMaterials);
+		for (auto matHandle : materialHandles)
+		{
+			const Resource::Material& mat = Resource::GetRef(matHandle);
+
+			ENSURE(matHandle.index < gpuMats.size());
+			gpuMats[matHandle.index] = Resource::FillGPUMaterialStruct(mat);
+		}
+
+		UploadData(
+		    gpuMats.data(), gpuMats.size() * sizeof(Resource::GPUMaterial), bindlessResources.materialStorageBuffer
+		);
+
+		PRINT_DEBUG("Updated material buffer.");
+	}
+
+	void UpdateTextures(BindlessResources& bindlessResources)
+	{
+		const std::vector<Handle<Resource::Texture2D>> textureHandles =
+		    Resource::GetAliveHandles<Resource::Texture2D>();
+
+		Handle<Resource::Texture2D> fallbackTex = Resource::GetMissingTexture();
+		vk::DescriptorImageInfo fallback        = {
+		    .sampler     = nullptr,
+		    .imageView   = Resource::GetRef(fallbackTex).view,
+		    .imageLayout = vk::ImageLayout::eReadOnlyOptimal,
+		};
+
+		std::vector<vk::DescriptorImageInfo> texInfo(BindlessResources::kMaxTextureDescs, fallback);
+		for (auto texHandle : textureHandles)
+		{
+			const Resource::Texture2D& tex = Resource::GetRef(texHandle);
+
+			// If it isnt a samplable image, skip this texture.
+			if (!(tex.desc.usage & vk::ImageUsageFlagBits::eSampled))
+			{
+				continue;
+			}
+
+			ENSURE(texHandle.index < texInfo.size());
+			texInfo[texHandle.index] = {
+			    .sampler     = nullptr,
+			    .imageView   = tex.view,
+			    .imageLayout = vk::ImageLayout::eReadOnlyOptimal,
+			};
+		}
+
+		vk::WriteDescriptorSet write = {
+		    .dstSet          = bindlessResources.set,
+		    .dstBinding      = BindlessResources::BindSlotTextures,
+		    .dstArrayElement = 0,
+		    .descriptorType  = vk::DescriptorType::eSampledImage,
+		};
+		write.setImageInfo(texInfo);
+
+		Graphics::gVkDevice.updateDescriptorSets(write, nullptr);
+	}
+
+	void UpdateSamplers(BindlessResources& bindlessResources)
+	{
+		const std::vector<Handle<Resource::Sampler2D>> samplerHandles =
+		    Resource::GetAliveHandles<Resource::Sampler2D>();
+
+		Handle<Resource::Sampler2D> fallbackSampler =
+		    bindlessResources.samplerCache.GetDefaultSampler(DefaultSamplerLinearRepeat);
+		vk::DescriptorImageInfo fallback = {.sampler = Resource::GetRef(fallbackSampler).sampler};
+
+		std::vector<vk::DescriptorImageInfo> samplerInfos(BindlessResources::kMaxSamplers, fallback);
+		for (auto samplerHandle : samplerHandles)
+		{
+			const Resource::Sampler2D sampler = Resource::GetRef(samplerHandle);
+
+			ENSURE(samplerHandle.index < samplerInfos.size());
+			samplerInfos[samplerHandle.index] = {
+			    .sampler = sampler.sampler,
+			};
+		}
+
+		vk::WriteDescriptorSet write = {
+		    .dstSet          = bindlessResources.set,
+		    .dstBinding      = BindlessResources::BindSlotSamplers,
+		    .dstArrayElement = 0,
+		    .descriptorType  = vk::DescriptorType::eSampler,
+		};
+		write.setImageInfo(samplerInfos);
+
+		Graphics::gVkDevice.updateDescriptorSets(write, nullptr);
+	}
+} // namespace Renderer
+
+namespace Renderer
+{
 	void Setup()
 	{
-		// Misc resources
-		{
-			gMaterialStorageBuffer = CreateBuffer(
-			    sizeof(Resource::GPUMaterial) * gMaxMaterials,
-			    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-			    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
-			);
-
-			gBindlessPool.Initialize(1024, gMaterialStorageBuffer);
-		}
+		CreateBindlessResources(gBindlessResources);
 
 		// Scene depth creation
 		{
@@ -342,7 +552,7 @@ namespace Renderer
 			};
 
 			// This order must match the set indices inside shaders layout(set = i).
-			const std::array setLayouts = {gBindlessPool.descLayout, gPerFrameDescLayout};
+			const std::array setLayouts = {gBindlessResources.layout, gPerFrameDescLayout};
 
 			pipelineLayoutInfo = {};
 			pipelineLayoutInfo.setSetLayouts(setLayouts);
@@ -391,7 +601,6 @@ namespace Renderer
 		// TODO: REMOVE LATER
 		{
 			AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
-			sShouldUpdateMaterialBuffer = true;
 		}
 	} // namespace Renderer
 
@@ -400,8 +609,7 @@ namespace Renderer
 		// Release all internal resources. Resource pools will clear themselves elsewere.
 		Resource::Release(gSceneDepth);
 
-		DestroyBuffer(gMaterialStorageBuffer);
-		gBindlessPool.Destroy();
+		DestroyBindlessResources(gBindlessResources);
 
 		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
@@ -439,28 +647,31 @@ namespace Renderer
 			});
 		}
 
+		const bool shouldUpdateBindlessResources =
+		    sShouldUpdateMaterialBuffer || sShouldUpdateSamplers || sShouldUpdateTextures;
+
+		if (shouldUpdateBindlessResources)
+		{
+			// Wait before uploading to ensure any frames in flights are guaranteed to be done using their resources.
+			Graphics::WaitForDevice();
+		}
+
 		if (sShouldUpdateMaterialBuffer)
 		{
-			static std::array<Resource::GPUMaterial, gMaxMaterials> gpuMats = {};
-
-			const std::vector<Handle<Resource::Material>> materialHandles =
-			    Resource::GetAliveHandles<Resource::Material>();
-
-			for (Handle<Resource::Material> matHandle : materialHandles)
-			{
-				const Resource::Material& mat = Resource::GetRef(matHandle);
-
-				gpuMats[matHandle.index] = Resource::FillGPUMaterialStruct(mat);
-			}
-
-			// Wait before uploading to ensure any frames in flights are guaranteed to be done using their materials.
-			Graphics::WaitForDevice();
-
-			UploadData(gpuMats.data(), gpuMats.size() * sizeof(Resource::GPUMaterial), gMaterialStorageBuffer);
-
-			PRINT_DEBUG("Updated material buffer.");
-
+			UpdateMaterialBuffer(gBindlessResources);
 			sShouldUpdateMaterialBuffer = false;
+		}
+
+		if (sShouldUpdateSamplers)
+		{
+			UpdateSamplers(gBindlessResources);
+			sShouldUpdateSamplers = false;
+		}
+
+		if (sShouldUpdateTextures)
+		{
+			UpdateTextures(gBindlessResources);
+			sShouldUpdateTextures = false;
 		}
 
 		if (sShouldRecreateSwapchain)
@@ -718,7 +929,7 @@ namespace Renderer
 				    vk::PipelineBindPoint::eGraphics,
 				    currentLayout,
 				    0,
-				    {gBindlessPool.bindlessSet, frameResources.agnosticConstantsSet},
+				    {gBindlessResources.set, frameResources.agnosticConstantsSet},
 				    {}
 				);
 

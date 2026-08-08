@@ -32,7 +32,6 @@ namespace Resource
 	{
 		detail::ImageAllocation allocation = {};
 		vk::ImageView view                 = nullptr;
-		uint32_t bindlessIndex             = UINT32_MAX;
 
 		TextureDesc2D desc;
 
@@ -64,5 +63,8 @@ namespace Resource
 		    .usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment,
 		};
 	}
+
+	// The handle is not owned by this function so the caller is responsible for adding reference if it is to be saved.
+	[[nodiscard]] Handle<Texture2D> GetMissingTexture();
 
 } // namespace Resource

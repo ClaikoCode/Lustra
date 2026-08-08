@@ -187,39 +187,11 @@ namespace
 			case Resource::Material::MapType::Albedo:
 				if (defaultAlbedo == nullhandle)
 				{
-					// Full white default albedo.
-					std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(255u));
-
 					// TODO: Implement a way to use the checker texture for albedo only when texture is unresolvable vs
 					// simply not slotted through an index of -1
 
-					// std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(0u));
-					// const uint32_t checkerSquareSize = 16u;
-					// // Checkered magenta and black albedo texture.
-					// for (uint32_t i = 0; i < albedoColors.size(); i += 4u)
-					// {
-					// 	// Four bytes per pixel
-					// 	const uint32_t pixelIndex = i / 4u;
-					//
-					// 	const uint32_t x = pixelIndex % defaultTexSize;
-					// 	const uint32_t y = pixelIndex / defaultTexSize;
-					//
-					// 	const bool xEvenSquare = (x / checkerSquareSize) % 2 == 0;
-					// 	const bool yEvenSquare = (y / checkerSquareSize) % 2 == 0;
-					//
-					// 	// 00 = black, 10 = magenta, 01, = magenta, 11 = black
-					// 	const bool writeMagenta = xEvenSquare ^ yEvenSquare;
-					//
-					// 	if (writeMagenta)
-					// 	{
-					// 		// Color in R and B channel = magenta.
-					// 		albedoColors[i]     = std::byte(255u);
-					// 		albedoColors[i + 2] = std::byte(255u);
-					// 	}
-					//
-					// 	// Alpha
-					// 	albedoColors[i + 3] = std::byte(255u);
-					// }
+					// Full white default albedo.
+					std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(255u));
 
 					defaultAlbedo = Resource::AllocateNonOwning<Resource::Texture2D>();
 
@@ -537,10 +509,7 @@ std::optional<TextureArtifact> ResolveTextureArtifact(
     int32_t texIndex, ColorSpace colorSpace, ProcessModelStatics& statics
 )
 {
-	if (texIndex == -1)
-	{
-		return std::nullopt;
-	}
+	ENSURE_EX(texIndex != -1, "Should never be allowed to be called with -1 as index.");
 
 	const tg3_model& tg3Model = statics.tg3Model;
 	const tg3_texture& tex    = tg3Model.textures[texIndex];
@@ -641,8 +610,8 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 		Handle<Resource::Texture2D> texHandle = {};
 		if (!result)
 		{
-			PRINT_DEBUG("Could not resolve map for map type '{}'. Using default.", (uint8_t)mapType);
-			texHandle = GetDefaultTexture(mapType);
+			PRINT_DEBUG("Could not resolve map for map type '{}'. Using missing texture.", (uint8_t)mapType);
+			texHandle = Resource::GetMissingTexture();
 		}
 		else
 		{
@@ -714,137 +683,138 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 		// Will  with the artifact that will contain the ORM information.
 		TextureArtifact finalTexArtifact = {};
 
-		std::optional<TextureArtifact> metalRoughResult =
-		    ResolveTextureArtifact(metalRoughTexIndex, colorSpace, statics);
-
-		// If they point to the same texture, ORM is already encoded in the texture they are referencing.
-		if (metalRoughResult && metalRoughTexIndex == occlusionTexIndex)
+		if (occlusionTexIndex == -1)
 		{
-			PRINT_DEBUG("AO and MR index are the same. ORM texture passed along directly.");
+			std::optional<TextureArtifact> metalRoughResult =
+			    ResolveTextureArtifact(metalRoughTexIndex, colorSpace, statics);
 
-			finalTexArtifact = std::move(metalRoughResult.value());
+			if (metalRoughResult)
+			{
+				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
+
+				// Write default data for occlusion channel.
+				for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
+				{
+					// R = Occlusion
+					metalRoughTexArtifact.data[i] = std::byte(255u); // Equates to no ambient occlusion
+				}
+
+				finalTexArtifact = std::move(metalRoughTexArtifact);
+			}
 		}
-		else
+		else if (metalRoughTexIndex == -1)
 		{
 			std::optional<TextureArtifact> occlusionResult =
 			    ResolveTextureArtifact(occlusionTexIndex, colorSpace, statics);
 
-			if (!occlusionResult && !metalRoughResult)
+			if (occlusionResult)
 			{
-				PRINT_DEBUG("Couldnt resolve AO or MR maps.");
+				TextureArtifact& occlusionTexArtifact = occlusionResult.value();
+
+				// Write default data for roughness + metallic channel.
+				for (size_t i = 0; i < occlusionTexArtifact.data.size(); i += 4)
+				{
+					// G = Roughness
+					occlusionTexArtifact.data[i + 1] = std::byte(255u); // Full roughness
+
+					// B = Metallic
+					occlusionTexArtifact.data[i + 2] = std::byte(0u); // No metallic properties
+				}
+
+				finalTexArtifact = std::move(occlusionTexArtifact);
+			}
+		}
+		else // Both texture indices exist.
+		{
+			std::optional<TextureArtifact> metalRoughResult =
+			    ResolveTextureArtifact(metalRoughTexIndex, colorSpace, statics);
+
+			// If they point to the same texture, ORM is already encoded in the texture that both indices point at.
+			if (metalRoughResult && metalRoughTexIndex == occlusionTexIndex)
+			{
+				PRINT_DEBUG("AO and MR index are the same. ORM texture passed along directly.");
+
+				finalTexArtifact = std::move(metalRoughResult.value());
 			}
 			else
 			{
-				if (!metalRoughResult)
+				std::optional<TextureArtifact> occlusionResult =
+				    ResolveTextureArtifact(occlusionTexIndex, colorSpace, statics);
+
+				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
+				TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
+
+				ENSURE(metalRoughTexArtifact.channels == 4 && occlusionTexArtifact.channels == 4);
+
+				// Guaranteed by the spec (unless extensions are used).
+				ENSURE(
+				    metalRoughTexArtifact.componentType == ComponentType::U8 &&
+				    occlusionTexArtifact.componentType == ComponentType::U8
+				);
+
+				const bool sameDims = (metalRoughTexArtifact.dims == occlusionTexArtifact.dims);
+
+				if (!sameDims)
 				{
-					TextureArtifact& occlusionTexArtifact = occlusionResult.value();
+					PRINT_DEBUG(
+					    "ORM texture dimensions does not match with each other. Upscaling smaller tex to "
+					    "fit in the larger one."
+					);
 
-					// Write default data for roughness + metallic channel.
-					for (size_t i = 0; i < occlusionTexArtifact.data.size(); i += 4)
+					// For now only supports aspect ratios of 1:1 (square).
+					ENSURE(metalRoughTexArtifact.dims.width == metalRoughTexArtifact.dims.height);
+					ENSURE(occlusionTexArtifact.dims.width == occlusionTexArtifact.dims.height);
+
+					const uint32_t largestDim =
+					    std::max(metalRoughTexArtifact.dims.width, occlusionTexArtifact.dims.width);
+
+					const bool occlusionSmaller = occlusionTexArtifact.dims.width < metalRoughTexArtifact.dims.width;
+					TextureArtifact& largerTex  = occlusionSmaller ? metalRoughTexArtifact : occlusionTexArtifact;
+					const TextureArtifact& smallerTex = occlusionSmaller ? occlusionTexArtifact : metalRoughTexArtifact;
+
+					glm::u8vec4* largerTexPixels = reinterpret_cast<glm::u8vec4*>(largerTex.data.data());
+
+					// Upsample the smaller texture to the dimensions of the larger texture to not loose any
+					// information/detail.
+					for (uint32_t y = 0; y < largestDim; y++)
 					{
-						// G = Roughness
-						occlusionTexArtifact.data[i + 1] = std::byte(255u); // Full roughness
+						for (uint32_t x = 0; x < largestDim; x++)
+						{
+							// Offset by half a pixel.
+							const glm::vec2 uv = (glm::vec2(x, y) + 0.5f) / static_cast<float>(largestDim);
 
-						// B = Metallic
-						occlusionTexArtifact.data[i + 2] = std::byte(0u); // No metallic properties
+							const glm::u8vec4 sample = GraphicsUtils::SampleBilinearU8(
+							    smallerTex.data, uv, smallerTex.dims.width, smallerTex.dims.height, smallerTex.channels
+							);
+
+							const uint32_t index1D = x + (y * largestDim);
+
+							// Write to specific channels because spec does not guarantee that textures dont have
+							// overlapping, but redundant, color values.
+							if (occlusionSmaller)
+							{
+								largerTexPixels[index1D].r = sample.r;
+							}
+							else
+							{
+								largerTexPixels[index1D].g = sample.g;
+								largerTexPixels[index1D].b = sample.b;
+							}
+						}
 					}
 
-					finalTexArtifact = std::move(occlusionTexArtifact);
-				}
-				else if (!occlusionResult)
-				{
-					TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
-
-					// Write default data for occlusion channel.
-					for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
-					{
-						// R = Occlusion
-						metalRoughTexArtifact.data[i] = std::byte(255u); // Equates to no ambient occlusion
-					}
-
-					finalTexArtifact = std::move(metalRoughTexArtifact);
+					finalTexArtifact = std::move(largerTex);
 				}
 				else
 				{
-					TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
-					TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
-
-					ENSURE(metalRoughTexArtifact.channels == 4 && occlusionTexArtifact.channels == 4);
-
-					// Guaranteed by the spec (unless extensions are used).
-					CHECK(
-					    metalRoughTexArtifact.componentType == ComponentType::U8 &&
-					    occlusionTexArtifact.componentType == ComponentType::U8
-					);
-
-					const bool sameDims = (metalRoughTexArtifact.dims == occlusionTexArtifact.dims);
-
-					if (!sameDims)
+					// Write occlusion into roughness and metallic buffer.
+					// Only loops data from the RED channel (assuming U8 encoding).
+					for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
 					{
-						PRINT_WARNING(
-						    "ORM texture dimensions does not match with each other. Upscaling smaller tex to "
-						    "fit in the larger one."
-						);
-
-						// For now only supports aspect ratios of 1:1 (square).
-						ENSURE(metalRoughTexArtifact.dims.width == metalRoughTexArtifact.dims.height);
-						ENSURE(occlusionTexArtifact.dims.width == occlusionTexArtifact.dims.height);
-
-						const uint32_t largestDim =
-						    std::max(metalRoughTexArtifact.dims.width, occlusionTexArtifact.dims.width);
-
-						const bool occlusionSmaller =
-						    occlusionTexArtifact.dims.width < metalRoughTexArtifact.dims.width;
-						TextureArtifact& largerTex = occlusionSmaller ? metalRoughTexArtifact : occlusionTexArtifact;
-						const TextureArtifact& smallerTex =
-						    occlusionSmaller ? occlusionTexArtifact : metalRoughTexArtifact;
-
-						glm::u8vec4* largerTexPixels = reinterpret_cast<glm::u8vec4*>(largerTex.data.data());
-
-						for (uint32_t y = 0; y < largestDim; y++)
-						{
-							for (uint32_t x = 0; x < largestDim; x++)
-							{
-								// Offset by half a pixel.
-								const glm::vec2 uv = (glm::vec2(x, y) + 0.5f) / static_cast<float>(largestDim);
-
-								const glm::u8vec4 sample = GraphicsUtils::SampleBilinearU8(
-								    smallerTex.data,
-								    uv,
-								    smallerTex.dims.width,
-								    smallerTex.dims.height,
-								    smallerTex.channels
-								);
-
-								const uint32_t index1D = x + (y * largestDim);
-
-								// Write to specific channels because spec does not guarantee that textures dont have
-								// overlapping, but redundant, color values.
-								if (occlusionSmaller)
-								{
-									largerTexPixels[index1D].r = sample.r;
-								}
-								else
-								{
-									largerTexPixels[index1D].g = sample.g;
-									largerTexPixels[index1D].b = sample.b;
-								}
-							}
-						}
-
-						finalTexArtifact = std::move(largerTex);
+						metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
 					}
-					else
-					{
-						// Write occlusion into roughness and metallic buffer.
-						// The spec ensures that data channels are U8.
-						for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
-						{
-							metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
-						}
 
-						finalTexArtifact = std::move(metalRoughTexArtifact);
-					}
+					finalTexArtifact = std::move(metalRoughTexArtifact);
 				}
 			}
 		}
@@ -852,15 +822,15 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 		Handle<Resource::Texture2D> texHandle = {};
 		if (finalTexArtifact.data.empty())
 		{
-			PRINT_DEBUG("Empty data for ORM texture. Using default.");
-			texHandle = GetDefaultTexture(Resource::Material::MapType::ORM);
+			PRINT_DEBUG("Could not resolve data for ORM texture. Using missing texture.");
+			texHandle = Resource::GetMissingTexture();
 		}
 		else
 		{
 			Resource::TextureDesc2D texDesc = {
-			    .width     = finalTexArtifact.dims.width, // Guaranteed by the spec (unless extensions are used).
+			    .width     = finalTexArtifact.dims.width,
 			    .height    = finalTexArtifact.dims.height,
-			    .format    = vk::Format::eR8G8B8A8Unorm,
+			    .format    = vk::Format::eR8G8B8A8Unorm, // Guaranteed by the spec (unless extensions are used).
 			    .usage     = vk::ImageUsageFlagBits::eSampled,
 			    .mipLevels = finalTexArtifact.mipCount,
 			};

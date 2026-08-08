@@ -28,10 +28,10 @@ namespace Resource
 
 		gpuMaterial.properties = material.properties;
 
-		gpuMaterial.albedoIndex   = GetRef(material.maps.albedo).bindlessIndex;
-		gpuMaterial.emissiveIndex = GetRef(material.maps.emissive).bindlessIndex;
-		gpuMaterial.normalIndex   = GetRef(material.maps.normal).bindlessIndex;
-		gpuMaterial.ormIndex      = GetRef(material.maps.orm).bindlessIndex;
+		gpuMaterial.albedoIndex   = material.maps.albedo.index;
+		gpuMaterial.emissiveIndex = material.maps.emissive.index;
+		gpuMaterial.normalIndex   = material.maps.normal.index;
+		gpuMaterial.ormIndex      = material.maps.orm.index;
 
 		return gpuMaterial;
 	}

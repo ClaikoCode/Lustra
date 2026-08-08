@@ -4,7 +4,6 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "LustraLib/Assert.h"
-#include "Renderer.h"
 #include "Resource.h"
 
 using namespace detail;
@@ -209,11 +208,6 @@ namespace Resource
 
 		texture2D.view = AssertVk(Graphics::gVkDevice.createImageView(viewInfo, Graphics::gAllocationCallbacks));
 
-		if (texture2D.desc.usage & vk::ImageUsageFlagBits::eSampled)
-		{
-			// TODO: Find a better way of solving this pool dependency.
-			texture2D.bindlessIndex = Renderer::gBindlessPool.RegisterTexture(texture2D.view);
-		}
 	} // namespace Resource
 
 	void CreateReadOnlyTexture2D(
@@ -285,5 +279,58 @@ namespace Resource
 		newDesc.height        = newHeight;
 
 		Resource::CreateTexture2D(tex, newDesc);
+	}
+
+	[[nodiscard]] Handle<Texture2D> GetMissingTexture()
+	{
+		static Handle<Texture2D> missingTexHandle = nullhandle;
+
+		if (missingTexHandle == nullhandle)
+		{
+			const uint32_t defaultTexSize   = 256u;
+			const size_t textureSizeInBytes = 4ull * defaultTexSize * defaultTexSize;
+
+			std::vector<std::byte> albedoColors(textureSizeInBytes, std::byte(0u));
+			const uint32_t checkerSquareSize = 16u;
+			// Checkered magenta and black albedo texture.
+			for (uint32_t i = 0; i < albedoColors.size(); i += 4u)
+			{
+				// Four bytes per pixel
+				const uint32_t pixelIndex = i / 4u;
+
+				const uint32_t x = pixelIndex % defaultTexSize;
+				const uint32_t y = pixelIndex / defaultTexSize;
+
+				const bool xEvenSquare = (x / checkerSquareSize) % 2 == 0;
+				const bool yEvenSquare = (y / checkerSquareSize) % 2 == 0;
+
+				// 00 = black, 10 = magenta, 01, = magenta, 11 = black
+				const bool writeMagenta = xEvenSquare ^ yEvenSquare;
+
+				if (writeMagenta)
+				{
+					// Color in R and B channel = magenta.
+					albedoColors[i]     = std::byte(255u);
+					albedoColors[i + 2] = std::byte(255u);
+				}
+
+				// Alpha
+				albedoColors[i + 3] = std::byte(255u);
+			}
+
+			Resource::TextureDesc2D texDesc = {
+			    .width     = defaultTexSize,
+			    .height    = defaultTexSize,
+			    .format    = vk::Format::eR8G8B8A8Srgb,
+			    .usage     = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+			    .mipLevels = 1,
+			};
+
+			missingTexHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
+
+			Resource::CreateReadOnlyTexture2D(missingTexHandle, texDesc, albedoColors);
+		}
+
+		return missingTexHandle;
 	}
 } // namespace Resource

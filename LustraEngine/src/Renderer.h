@@ -1,10 +1,10 @@
 #pragma once
 
-#include "BindlessDescriptorPool.h"
 #include "Buffer.h"
 #include "LustraGLM.h"
 #include "LustraVulkan.h"
 #include "Model.h"
+#include "SamplerCache.h"
 #include "Texture.h"
 
 namespace Renderer
@@ -35,6 +35,29 @@ namespace Renderer
 		vk::DescriptorSet agnosticConstantsSet;
 	};
 
+	struct BindlessResources
+	{
+		enum BindSlot : uint8_t
+		{
+			BindSlotMaterials = 0,
+			BindSlotSamplers,
+			BindSlotTextures,
+
+			BindSlotCount // Keep last.
+		};
+
+		static constexpr uint32_t kMaxTextureDescs = 1024u;
+		static constexpr uint32_t kMaxMaterials    = 256u;
+		static constexpr uint32_t kMaxSamplers     = 32u;
+
+		AllocatedBuffer materialStorageBuffer;
+		vk::DescriptorSetLayout layout;
+		vk::DescriptorPool descriptorPool;
+		vk::DescriptorSet set;
+
+		SamplerCache samplerCache;
+	};
+
 	struct ModelInstance
 	{
 		Handle<Resource::Model> modelHandle = nullhandle;
@@ -43,8 +66,7 @@ namespace Renderer
 
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
-	constexpr uint32_t gMaxMeshes    = 4096u;
-	constexpr uint32_t gMaxMaterials = 1024u;
+	constexpr uint32_t gMaxMeshes = 4096u;
 
 	inline Handle<Resource::Texture2D> gSceneDepth;
 	inline std::array<FrameResources, gMaxFramesInFlight> gFramesInFlight = {};
@@ -63,8 +85,7 @@ namespace Renderer
 
 	inline uint32_t gFrameIndex = 0u;
 
-	inline BindlessDescriptorPool gBindlessPool;
-	inline AllocatedBuffer gMaterialStorageBuffer;
+	inline BindlessResources gBindlessResources;
 
 	void Setup();
 	void Destroy();

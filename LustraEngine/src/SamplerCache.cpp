@@ -22,8 +22,6 @@ namespace
 
 void SamplerCache::Initialize()
 {
-	std::array<Resource::SamplerDesc2D, DefaultSamplerCount> defaultSamplers = {};
-
 	defaultSamplers[DefaultSamplerLinearRepeat] = {
 	    .magFilter      = vk::Filter::eLinear,
 	    .minFilter      = vk::Filter::eLinear,
@@ -80,6 +78,11 @@ Handle<Resource::Sampler2D> SamplerCache::GetOrCreateSampler2D(const Resource::S
 	}
 
 	return m_samplerMap.at(key);
+}
+
+Handle<Resource::Sampler2D> SamplerCache::GetDefaultSampler(DefaultSampler defaultSampler)
+{
+	return GetOrCreateSampler2D(defaultSamplers[defaultSampler]);
 }
 
 void SamplerCache::Destroy()

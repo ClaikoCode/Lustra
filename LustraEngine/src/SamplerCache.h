@@ -29,6 +29,10 @@ class SamplerCache
 
 	void Destroy();
 
+	Handle<Resource::Sampler2D> GetDefaultSampler(DefaultSampler defaultSampler);
+
+	std::array<Resource::SamplerDesc2D, DefaultSamplerCount> defaultSamplers = {};
+
   private:
 	SamplerMap m_samplerMap;
 };

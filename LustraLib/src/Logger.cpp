@@ -34,7 +34,8 @@ namespace LustraLib
 
 		const char* outputLevelString =
 		    outputLevel < OutputLevelCount ? ceOutputLevelString[outputLevel] : "UNKNOWN OUTPUT LEVEL";
-		FILE* const outputFile = outputLevel == OutputLevelError ? stderr : stdout;
+
+		FILE* const outputFile = stdout;
 
 		if (gLoggerOptions.printSourceLocationInfo)
 		{

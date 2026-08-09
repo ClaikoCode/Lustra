@@ -34,3 +34,10 @@ add_custom_command(TARGET LustraEngine POST_BUILD
 target_compile_definitions(
 	LustraEngine PRIVATE LUSTRA_CORE_ASSET_ROOT="Assets/"
 )
+
+# VK_NO_PROTOTYPES: Will remove function declarations from vulkan core,
+# fully relying on dynamic dispatch. It will also
+# define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1.
+target_compile_definitions(
+	LustraEngine PUBLIC VK_NO_PROTOTYPES
+)

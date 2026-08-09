@@ -6,6 +6,7 @@
 #include "LustraVulkan.h"
 
 #include <source_location>
+#include <unordered_map>
 
 namespace detail
 {
@@ -66,12 +67,51 @@ inline vk::Result AssertVk(VkResult result, std::source_location loc = std::sour
 	return castedResult;
 }
 
+template <typename VkObject>
+inline void NameVk(vk::Device device, VkObject vkHandle, std::string_view name = "")
+{
+	if (VULKAN_HPP_DEFAULT_DISPATCHER.vkSetDebugUtilsObjectNameEXT == nullptr)
+	{
+		PRINT_WARNING("Dispatcher does not have function for naming objects. Aborting.");
+		return;
+	}
+
+	if (vkHandle == VK_NULL_HANDLE)
+	{
+		return;
+	}
+
+	std::string nameString = std::string(name);
+	if (name.empty())
+	{
+		nameString = std::string("Unnamed ") + vk::to_string(vk::Buffer::objectType);
+	}
+
+	static std::unordered_map<std::string, uint32_t> sNameCounts;
+
+	uint32_t& count = ++sNameCounts[nameString];
+	if (count > 1)
+	{
+		nameString += std::format("({})", count - 1);
+	}
+
+	AssertVk(device.setDebugUtilsObjectNameEXT(vkHandle, nameString));
+}
+
 // =================================
 // 	   Graphics Helper Functions
 // =================================
 
 namespace GraphicsUtils
 {
+
+	using FeatureChain = vk::StructureChain<
+	    vk::PhysicalDeviceFeatures2,
+	    vk::PhysicalDeviceVulkan11Features,
+	    vk::PhysicalDeviceVulkan12Features,
+	    vk::PhysicalDeviceVulkan13Features,
+	    vk::PhysicalDeviceVulkan14Features>;
+
 	struct FeatureNamesInfo
 	{
 		const char* const* names;
@@ -97,10 +137,4 @@ namespace GraphicsUtils
 	    std::span<const std::byte> imageData, glm::vec2 uv, uint32_t width, uint32_t height, uint32_t channels
 	);
 
-	using FeatureChain = vk::StructureChain<
-	    vk::PhysicalDeviceFeatures2,
-	    vk::PhysicalDeviceVulkan11Features,
-	    vk::PhysicalDeviceVulkan12Features,
-	    vk::PhysicalDeviceVulkan13Features,
-	    vk::PhysicalDeviceVulkan14Features>;
 } // namespace GraphicsUtils

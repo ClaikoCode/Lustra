@@ -1,4 +1,3 @@
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
 #define VMA_STATIC_VULKAN_FUNCTIONS 0  // no static symbols exist
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1 // let VMA fetch the rest itself
 #define VMA_IMPLEMENTATION

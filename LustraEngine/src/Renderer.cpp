@@ -782,15 +782,16 @@ namespace Renderer
 		// with the semaphore.
 		// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of date
 		// code as an error, stopping the program. Using the C API lets the renderer recover in those cases.
-		uint32_t imageAcquiredIndex        = 0u;
-		const auto imageAcquireResultValue = static_cast<vk::Result>(vkAcquireNextImageKHR(
-		    Graphics::gVkDevice,
-		    Graphics::gSwapchain.swapchain,
-		    kMaxSignalWait,
-		    imageAcquireSemaphore,
-		    VK_NULL_HANDLE,
-		    &imageAcquiredIndex
-		));
+		uint32_t imageAcquiredIndex = 0u;
+		const auto imageAcquireResultValue =
+		    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkAcquireNextImageKHR(
+		        Graphics::gVkDevice,
+		        Graphics::gSwapchain.swapchain,
+		        kMaxSignalWait,
+		        imageAcquireSemaphore,
+		        VK_NULL_HANDLE,
+		        &imageAcquiredIndex
+		    ));
 
 		if (imageAcquireResultValue == vk::Result::eErrorOutOfDateKHR)
 		{
@@ -1067,7 +1068,8 @@ namespace Renderer
 			// date code as an error, stopping the program. Using the C API lets the renderer recover in those
 			// cases.
 			const VkPresentInfoKHR& presentInfoC = presentInfo;
-			const auto presentResult = static_cast<vk::Result>(vkQueuePresentKHR(graphicsQueue, &presentInfoC));
+			const auto presentResult =
+			    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR(graphicsQueue, &presentInfoC));
 
 			// Because this is the last thing that is done this frame, both suboptimal and out of date are handled
 			// NEXT frame.

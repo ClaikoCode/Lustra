@@ -535,11 +535,6 @@ Resource::PrimitiveRange GetPrimitiveRange(AttributeIndices atrIndicies, Process
 		// Add the primitive range to the accessor cache.
 		statics.accessorCache.emplace(atrIndicies, primRange);
 	}
-	else
-	{
-		static uint32_t count = 0;
-		PRINT_DEBUG("Accessor cache hit (N={})!", ++count);
-	}
 
 	return statics.accessorCache[atrIndicies];
 }
@@ -705,12 +700,6 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 		statics.texCache.emplace(texKey, texHandle);
 	}
 
-	else
-	{
-		static uint32_t count = 0;
-		PRINT_DEBUG("Texture cache hit (N={})!", ++count);
-	}
-
 	return statics.texCache[texKey];
 }
 
@@ -794,80 +783,89 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 				std::optional<TextureArtifact> occlusionResult =
 				    ResolveTextureArtifact(occlusionTexIndex, colorSpace, statics);
 
-				TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
-				TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
-
-				ENSURE(metalRoughTexArtifact.channels == 4 && occlusionTexArtifact.channels == 4);
-
-				// Guaranteed by the spec (unless extensions are used).
-				ENSURE(
-				    metalRoughTexArtifact.componentType == ComponentType::U8 &&
-				    occlusionTexArtifact.componentType == ComponentType::U8
-				);
-
-				const bool sameDims = (metalRoughTexArtifact.dims == occlusionTexArtifact.dims);
-
-				if (!sameDims)
+				if (occlusionResult && metalRoughResult)
 				{
-					PRINT_DEBUG(
-					    "ORM texture dimensions does not match with each other. Upscaling smaller tex to "
-					    "fit in the larger one."
+					TextureArtifact& metalRoughTexArtifact = metalRoughResult.value();
+					TextureArtifact& occlusionTexArtifact  = occlusionResult.value();
+
+					ENSURE(metalRoughTexArtifact.channels == 4 && occlusionTexArtifact.channels == 4);
+
+					// Guaranteed by the spec (unless extensions are used).
+					ENSURE(
+					    metalRoughTexArtifact.componentType == ComponentType::U8 &&
+					    occlusionTexArtifact.componentType == ComponentType::U8
 					);
 
-					// For now only supports aspect ratios of 1:1 (square).
-					ENSURE(metalRoughTexArtifact.dims.width == metalRoughTexArtifact.dims.height);
-					ENSURE(occlusionTexArtifact.dims.width == occlusionTexArtifact.dims.height);
+					const bool sameDims = (metalRoughTexArtifact.dims == occlusionTexArtifact.dims);
 
-					const uint32_t largestDim =
-					    std::max(metalRoughTexArtifact.dims.width, occlusionTexArtifact.dims.width);
-
-					const bool occlusionSmaller = occlusionTexArtifact.dims.width < metalRoughTexArtifact.dims.width;
-					TextureArtifact& largerTex  = occlusionSmaller ? metalRoughTexArtifact : occlusionTexArtifact;
-					const TextureArtifact& smallerTex = occlusionSmaller ? occlusionTexArtifact : metalRoughTexArtifact;
-
-					glm::u8vec4* largerTexPixels = reinterpret_cast<glm::u8vec4*>(largerTex.data.data());
-
-					// Upsample the smaller texture to the dimensions of the larger texture to not loose any
-					// information/detail.
-					for (uint32_t y = 0; y < largestDim; y++)
+					if (!sameDims)
 					{
-						for (uint32_t x = 0; x < largestDim; x++)
+						PRINT_DEBUG(
+						    "ORM texture dimensions does not match with each other. Upscaling smaller tex to "
+						    "fit in the larger one."
+						);
+
+						// For now only supports aspect ratios of 1:1 (square).
+						ENSURE(metalRoughTexArtifact.dims.width == metalRoughTexArtifact.dims.height);
+						ENSURE(occlusionTexArtifact.dims.width == occlusionTexArtifact.dims.height);
+
+						const uint32_t largestDim =
+						    std::max(metalRoughTexArtifact.dims.width, occlusionTexArtifact.dims.width);
+
+						const bool occlusionSmaller =
+						    occlusionTexArtifact.dims.width < metalRoughTexArtifact.dims.width;
+						TextureArtifact& largerTex = occlusionSmaller ? metalRoughTexArtifact : occlusionTexArtifact;
+						const TextureArtifact& smallerTex =
+						    occlusionSmaller ? occlusionTexArtifact : metalRoughTexArtifact;
+
+						glm::u8vec4* largerTexPixels = reinterpret_cast<glm::u8vec4*>(largerTex.data.data());
+
+						// Upsample the smaller texture to the dimensions of the larger texture to not loose any
+						// information/detail.
+						for (uint32_t y = 0; y < largestDim; y++)
 						{
-							// Offset by half a pixel.
-							const glm::vec2 uv = (glm::vec2(x, y) + 0.5f) / static_cast<float>(largestDim);
-
-							const glm::u8vec4 sample = GraphicsUtils::SampleBilinearU8(
-							    smallerTex.data, uv, smallerTex.dims.width, smallerTex.dims.height, smallerTex.channels
-							);
-
-							const uint32_t index1D = x + (y * largestDim);
-
-							// Write to specific channels because spec does not guarantee that textures dont have
-							// overlapping, but redundant, color values.
-							if (occlusionSmaller)
+							for (uint32_t x = 0; x < largestDim; x++)
 							{
-								largerTexPixels[index1D].r = sample.r;
-							}
-							else
-							{
-								largerTexPixels[index1D].g = sample.g;
-								largerTexPixels[index1D].b = sample.b;
+								// Offset by half a pixel.
+								const glm::vec2 uv = (glm::vec2(x, y) + 0.5f) / static_cast<float>(largestDim);
+
+								const glm::u8vec4 sample = GraphicsUtils::SampleBilinearU8(
+								    smallerTex.data,
+								    uv,
+								    smallerTex.dims.width,
+								    smallerTex.dims.height,
+								    smallerTex.channels
+								);
+
+								const uint32_t index1D = x + (y * largestDim);
+
+								// Write to specific channels because spec does not guarantee that textures dont have
+								// overlapping, but redundant, color values.
+								if (occlusionSmaller)
+								{
+									largerTexPixels[index1D].r = sample.r;
+								}
+								else
+								{
+									largerTexPixels[index1D].g = sample.g;
+									largerTexPixels[index1D].b = sample.b;
+								}
 							}
 						}
-					}
 
-					finalTexArtifact = std::move(largerTex);
-				}
-				else
-				{
-					// Write occlusion into roughness and metallic buffer.
-					// Only loops data from the RED channel (assuming U8 encoding).
-					for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
+						finalTexArtifact = std::move(largerTex);
+					}
+					else
 					{
-						metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
-					}
+						// Write occlusion into roughness and metallic buffer.
+						// Only loops data from the RED channel (assuming U8 encoding).
+						for (size_t i = 0; i < metalRoughTexArtifact.data.size(); i += 4)
+						{
+							metalRoughTexArtifact.data[i] = occlusionTexArtifact.data[i];
+						}
 
-					finalTexArtifact = std::move(metalRoughTexArtifact);
+						finalTexArtifact = std::move(metalRoughTexArtifact);
+					}
 				}
 			}
 		}
@@ -904,11 +902,6 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 		}
 
 		statics.texCache.emplace(ormTexKey, texHandle);
-	}
-	else
-	{
-		static uint32_t count = 0;
-		PRINT_DEBUG("Texture cache hit (N={})!", ++count);
 	}
 
 	return statics.texCache.at(ormTexKey);
@@ -959,11 +952,6 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		Resource::CreateMaterial(matName, matHandle, props, maps);
 
 		statics.matCache.emplace(matIndex, matHandle);
-	}
-	else
-	{
-		static uint32_t count = 0;
-		PRINT_DEBUG("Material cache hit (N={})!", ++count);
 	}
 
 	return statics.matCache.at(matIndex);

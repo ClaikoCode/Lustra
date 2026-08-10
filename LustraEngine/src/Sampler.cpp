@@ -6,7 +6,7 @@
 
 namespace Resource
 {
-	void CreateSampler2D(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc)
+	void CreateSampler2D(std::string_view name, Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc)
 	{
 		ENSURE(Get(samplerHandle) != nullptr);
 		constexpr bool kUseMipmapLinear = true; // TODO: Make this a global setting for performance purposes.
@@ -38,6 +38,9 @@ namespace Resource
 		sampler.sampler = AssertVk(Graphics::gVkDevice.createSampler(samplerInfo, Graphics::gAllocationCallbacks));
 
 		sampler.desc = desc;
+		sampler.name = name;
+
+		NameVk(Graphics::gVkDevice, sampler.sampler, sampler.name);
 	}
 
 	void DestroySampler2D(Handle<Sampler2D> samplerHandle)

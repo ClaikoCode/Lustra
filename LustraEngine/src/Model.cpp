@@ -8,6 +8,7 @@
 namespace Resource
 {
 	void CreateModel(
+	    std::string_view name,
 	    Handle<Model> modelHandle,
 	    std::vector<Vertex> vertices,
 	    std::vector<uint32_t> indices,
@@ -17,10 +18,13 @@ namespace Resource
 		Model* model = Resource::Get(modelHandle);
 		ENSURE(model != nullptr);
 
+		model->name = std::string(name);
+
 		GPUMesh& gpuMesh = model->geomSource.gpuMesh;
 
 		// Upload vertex data.
 		gpuMesh.vertexBuffer = CreateBufferFromCPUData(
+		    std::format("{}/Vertex Buffer", model->name),
 		    (void*)vertices.data(),
 		    sizeof(Vertex) * vertices.size(),
 		    vk::BufferUsageFlagBits::eVertexBuffer,
@@ -29,6 +33,7 @@ namespace Resource
 
 		// Upload index data.
 		gpuMesh.indexBuffer = CreateBufferFromCPUData(
+		    std::format("{}/Index Buffer", model->name),
 		    (void*)indices.data(),
 		    sizeof(uint32_t) * indices.size(),
 		    vk::BufferUsageFlagBits::eIndexBuffer,

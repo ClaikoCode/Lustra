@@ -7,11 +7,8 @@
 #include <string_view>
 #include <vector>
 
-#if defined(_DEBUG) || defined(_LUSTRA_FORCE_VULKAN_DEBUG_LAYERS)
-	#define USE_VALIDATION_LAYERS (true)
-#else
-	#define USE_VALIDATION_LAYERS (false)
-#endif
+#define USE_VALIDATION_LAYERS (true)
+#define USE_DEBUG_UTILS (true)
 
 // Graphics related constants and struct definitions.
 namespace Graphics
@@ -20,6 +17,7 @@ namespace Graphics
 	constexpr uint32_t gApplicationVersion  = vk::makeApiVersion(0, 0, 1, 0);
 	constexpr uint32_t gTargetVulkanVersion = vk::ApiVersion14;
 	constexpr bool gUseValidationLayers     = USE_VALIDATION_LAYERS;
+	constexpr bool gUseDebugUtils           = gUseValidationLayers || USE_DEBUG_UTILS;
 
 	constexpr vk::SurfaceFormatKHR gTargetSurfaceFormat = {
 	    // This format is supported essentially everywhere. Shader color writing to to swapchain is not affected by this

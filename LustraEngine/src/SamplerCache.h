@@ -34,5 +34,7 @@ class SamplerCache
 	std::array<Resource::SamplerDesc2D, DefaultSamplerCount> defaultSamplers = {};
 
   private:
+	void RegisterSampler(std::string_view name, const Resource::SamplerDesc2D& samplerDesc2D);
+
 	SamplerMap m_samplerMap;
 };

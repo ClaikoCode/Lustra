@@ -11,7 +11,7 @@ struct AllocatedBuffer
 
 // Create a buffer through VMA with AUTO memory usage.
 [[nodiscard]] AllocatedBuffer CreateBuffer(
-    size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
+    std::string_view name, size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
 );
 
 // Calls vmaDestroyBuffer() and resets member fields.
@@ -25,7 +25,11 @@ void CopyBuffers(AllocatedBuffer& dst, AllocatedBuffer& src, size_t sizeInBytes)
 
 // Creates a host-visible buffer and uploads the CPU data through a copy transfer.
 [[nodiscard]] AllocatedBuffer CreateBufferFromCPUData(
-    void* uploadData, size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
+    std::string_view name,
+    void* uploadData,
+    size_t sizeInBytes,
+    vk::BufferUsageFlags usageFlags,
+    VmaAllocationCreateFlags allocFlags
 );
 
 // Will check the memory type of dest buffer and choose the appropriate method of uploading the data.

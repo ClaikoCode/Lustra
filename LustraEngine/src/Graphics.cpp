@@ -156,7 +156,7 @@ namespace Graphics
 		gWindowPtr = &window;
 
 		// Setup dynamic loader.
-		const vk::detail::DynamicLoader dl;
+		static const vk::detail::DynamicLoader dl;
 		auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
 		vk::detail::defaultDispatchLoaderDynamic.init(vkGetInstanceProcAddr);
 
@@ -194,10 +194,14 @@ namespace Graphics
 		std::vector<const char*> requestedExtensions = {"VK_KHR_surface", "VK_KHR_get_surface_capabilities2"};
 		std::vector<const char*> requestedLayers     = {};
 
-		if constexpr (gUseValidationLayers)
+		if constexpr (gUseDebugUtils)
 		{
 			// Exposes an API specific for controlling debug utilities.
 			requestedExtensions.push_back("VK_EXT_debug_utils");
+		}
+
+		if constexpr (gUseValidationLayers)
+		{
 			// Enables Vk functions to validate arguments against the spec.
 			requestedLayers.push_back("VK_LAYER_KHRONOS_validation");
 		}
@@ -529,6 +533,10 @@ namespace Graphics
 		computeQueue.queue  = gVkDevice.getQueue(computeQueue.index, 0);
 		transferQueue.queue = gVkDevice.getQueue(transferQueue.index, 0);
 
+		NameVk(gVkDevice, graphicsQueue.queue, "Main Graphics Queue");
+		NameVk(gVkDevice, computeQueue.queue, "Main Compute Queue");
+		NameVk(gVkDevice, transferQueue.queue, "Main Transfer Queue");
+
 		// Create transfer pool
 		{
 			const vk::CommandPoolCreateInfo transferPoolInfo = {
@@ -538,6 +546,7 @@ namespace Graphics
 			};
 
 			gTransferPool = AssertVk(gVkDevice.createCommandPool(transferPoolInfo, gAllocationCallbacks));
+			NameVk(gVkDevice, gTransferPool, "Transfer Command Pool");
 		}
 	}
 
@@ -716,7 +725,7 @@ namespace Graphics
 			semaphore = AssertVk(gVkDevice.createSemaphore(semaphoreInfo, gAllocationCallbacks));
 		}
 
-		PRINT_DEBUG("Swapchain successfully created.");
+		PRINT_DEBUG("Swapchain successfully set up.");
 	}
 
 	void SetupVMA()

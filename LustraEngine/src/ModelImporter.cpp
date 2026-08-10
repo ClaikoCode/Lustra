@@ -62,6 +62,7 @@ using TextureCache = std::unordered_map<uint64_t, Handle<Resource::Texture2D>>;
 struct ProcessModelStatics
 {
 	const std::filesystem::path& baseFilePath;
+	const std::string& name;
 	const tg3_model& tg3Model;
 	std::vector<Resource::Vertex>& vertices;
 	std::vector<uint32_t>& indices;
@@ -196,7 +197,7 @@ namespace
 					defaultAlbedo = Resource::AllocateNonOwning<Resource::Texture2D>();
 
 					texDesc.format = vk::Format::eR8G8B8A8Srgb;
-					Resource::CreateReadOnlyTexture2D(defaultAlbedo, texDesc, albedoColors);
+					Resource::CreateReadOnlyTexture2D("Default Albedo", defaultAlbedo, texDesc, albedoColors);
 				}
 				returnHandle = defaultAlbedo;
 				break;
@@ -218,7 +219,7 @@ namespace
 					defaultNormal = Resource::AllocateNonOwning<Resource::Texture2D>();
 
 					texDesc.format = vk::Format::eR8G8B8A8Unorm;
-					Resource::CreateReadOnlyTexture2D(defaultNormal, texDesc, normalColors);
+					Resource::CreateReadOnlyTexture2D("Default Normal", defaultNormal, texDesc, normalColors);
 				}
 				returnHandle = defaultNormal;
 				break;
@@ -238,7 +239,7 @@ namespace
 					defaultEmissive = Resource::AllocateNonOwning<Resource::Texture2D>();
 
 					texDesc.format = vk::Format::eR8G8B8A8Srgb;
-					Resource::CreateReadOnlyTexture2D(defaultEmissive, texDesc, emissiveColor);
+					Resource::CreateReadOnlyTexture2D("Default Emissive", defaultEmissive, texDesc, emissiveColor);
 				}
 				returnHandle = defaultEmissive;
 				break;
@@ -253,7 +254,7 @@ namespace
 					defaultORM = Resource::AllocateNonOwning<Resource::Texture2D>();
 
 					texDesc.format = vk::Format::eR8G8B8A8Unorm;
-					Resource::CreateReadOnlyTexture2D(defaultORM, texDesc, ormColors);
+					Resource::CreateReadOnlyTexture2D("Default ORM", defaultORM, texDesc, ormColors);
 				}
 				returnHandle = defaultORM;
 				break;
@@ -278,7 +279,7 @@ namespace
 
 			const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
 
-			Resource::CreateMaterial(matHandle, props, maps);
+			Resource::CreateMaterial("Default Material", matHandle, props, maps);
 
 			defaultMaterial = matHandle;
 		}
@@ -331,7 +332,9 @@ namespace
 			}};
 
 			fallbackModel = Resource::AllocateNonOwning<Model>();
-			Resource::CreateModel(fallbackModel, std::move(vertices), std::move(indices), std::move(instances));
+			Resource::CreateModel(
+			    "Fallback Model", fallbackModel, std::move(vertices), std::move(indices), std::move(instances)
+			);
 
 			PRINT_DEBUG("Created fallback model.");
 		}
@@ -390,6 +393,42 @@ namespace
 		ENSURE(stride != -1);
 
 		return {buff.data.data + buffView.byte_offset + accessor.byte_offset, stride};
+	}
+
+	// Will check for the source image given a texture index.
+	// NOTE: Do NOT supply any other index than a texture index, as that will be UB.
+	std::string GetImageName(int32_t textureIndex, const tg3_model& model)
+	{
+		if (textureIndex == -1)
+		{
+			return "Null Image";
+		}
+
+		const tg3_texture& tex = model.textures[textureIndex];
+
+		if (tex.source == -1 || model.images[tex.source].name.len == 0)
+		{
+			return std::format("Tex{}", textureIndex);
+		}
+
+		return std::string(tg3StrToStrview(model.images[tex.source].name));
+	}
+
+	std::string GetMaterialName(int32_t materialIndex, const tg3_model& model)
+	{
+		if (materialIndex == -1)
+		{
+			return "Null Material";
+		}
+
+		const tg3_material& mat = model.materials[materialIndex];
+
+		if (mat.name.len == 0)
+		{
+			return std::format("Mat{}", materialIndex);
+		}
+
+		return std::string(tg3StrToStrview(mat.name));
 	}
 } // namespace
 
@@ -575,7 +614,7 @@ tg3_sampler GetSampler(int32_t texIndex, const tg3_model& tg3Model)
 }
 
 Handle<Resource::Texture2D> GetSimpleTextureHandle(
-    int32_t texIndex, ProcessModelStatics& statics, Resource::Material::MapType mapType
+    const std::string& materialName, int32_t texIndex, ProcessModelStatics& statics, Resource::Material::MapType mapType
 )
 {
 	if (texIndex == -1)
@@ -588,14 +627,21 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 	if (!statics.texCache.contains(texKey))
 	{
 		ColorSpace colorSpace = ColorSpace::Unknown;
+		std::string mapName;
 		switch (mapType)
 		{
 			case Resource::Material::MapType::Emissive:
+				mapName    = "Emissive";
+				colorSpace = ColorSpace::sRGB;
+				break;
+
 			case Resource::Material::MapType::Albedo:
+				mapName    = "Albedo";
 				colorSpace = ColorSpace::sRGB;
 				break;
 
 			case Resource::Material::MapType::Normal:
+				mapName    = "Normal";
 				colorSpace = ColorSpace::Linear;
 				break;
 
@@ -646,7 +692,14 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 			};
 
 			texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
-			Resource::CreateReadOnlyTexture2D(texHandle, texDesc, texArtifact.data);
+			Resource::CreateReadOnlyTexture2D(
+			    std::format(
+			        "{}/{}/{}/{}", statics.name, materialName, mapName, GetImageName(texIndex, statics.tg3Model)
+			    ),
+			    texHandle,
+			    texDesc,
+			    texArtifact.data
+			);
 		}
 
 		statics.texCache.emplace(texKey, texHandle);
@@ -662,7 +715,7 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 }
 
 Handle<Resource::Texture2D> GetORMTextureHandle(
-    int32_t occlusionTexIndex, int32_t metalRoughTexIndex, ProcessModelStatics& statics
+    const std::string& matName, int32_t occlusionTexIndex, int32_t metalRoughTexIndex, ProcessModelStatics& statics
 )
 {
 	if (occlusionTexIndex == -1 && metalRoughTexIndex == -1)
@@ -836,7 +889,18 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 			};
 
 			texHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
-			Resource::CreateReadOnlyTexture2D(texHandle, texDesc, finalTexArtifact.data);
+			Resource::CreateReadOnlyTexture2D(
+			    std::format(
+			        "{}/{}/ORMTex/({}, {})",
+			        statics.name,
+			        matName,
+			        GetImageName(occlusionTexIndex, statics.tg3Model),
+			        GetImageName(metalRoughTexIndex, statics.tg3Model)
+			    ),
+			    texHandle,
+			    texDesc,
+			    finalTexArtifact.data
+			);
 		}
 
 		statics.texCache.emplace(ormTexKey, texHandle);
@@ -868,15 +932,19 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		const int32_t albedoTexIndex     = material.pbr_metallic_roughness.base_color_texture.index;
 		const int32_t metalRoughTexIndex = material.pbr_metallic_roughness.metallic_roughness_texture.index;
 
+		std::string matName = GetMaterialName(matIndex, statics.tg3Model);
+
 		const Resource::Material::Maps maps = {
-		    .albedo =
-		        Resource::AddRef(GetSimpleTextureHandle(albedoTexIndex, statics, Resource::Material::MapType::Albedo)),
-		    .normal =
-		        Resource::AddRef(GetSimpleTextureHandle(normalTexIndex, statics, Resource::Material::MapType::Normal)),
-		    .emissive = Resource::AddRef(
-		        GetSimpleTextureHandle(emissiveTexIndex, statics, Resource::Material::MapType::Emissive)
+		    .albedo = Resource::AddRef(
+		        GetSimpleTextureHandle(matName, albedoTexIndex, statics, Resource::Material::MapType::Albedo)
 		    ),
-		    .orm = Resource::AddRef(GetORMTextureHandle(occlusionTexIndex, metalRoughTexIndex, statics)),
+		    .normal = Resource::AddRef(
+		        GetSimpleTextureHandle(matName, normalTexIndex, statics, Resource::Material::MapType::Normal)
+		    ),
+		    .emissive = Resource::AddRef(
+		        GetSimpleTextureHandle(matName, emissiveTexIndex, statics, Resource::Material::MapType::Emissive)
+		    ),
+		    .orm = Resource::AddRef(GetORMTextureHandle(matName, occlusionTexIndex, metalRoughTexIndex, statics)),
 		};
 
 		const Resource::MaterialProperties props = {
@@ -888,7 +956,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		};
 
 		const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
-		Resource::CreateMaterial(matHandle, props, maps);
+		Resource::CreateMaterial(matName, matHandle, props, maps);
 
 		statics.matCache.emplace(matIndex, matHandle);
 	}
@@ -972,6 +1040,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 // Returns true if model could be fully resolved.
 // Input model is assumed to have at least one scene containing a scene node.
 [[nodiscard]] bool ResolveModel(
+    const std::string& fileName,
     const std::filesystem::path& baseFilePath,
     const tg3_model& tg3Model,
     std::vector<Resource::Vertex>& vertices,
@@ -1024,10 +1093,10 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 	AccessorCache accessorCache = {};
 	MaterialCache matCache      = {};
 	TextureCache texCache       = {};
-	auto parentMatrix           = glm::mat4(1.0f);
 
 	ProcessModelStatics statics = {
 	    .baseFilePath  = baseFilePath,
+	    .name          = fileName,
 	    .tg3Model      = tg3Model,
 	    .vertices      = vertices,
 	    .indices       = indices,
@@ -1037,6 +1106,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 	    .texCache      = texCache,
 	};
 
+	auto parentMatrix = glm::mat4(1.0f);
 	return ProcessModel(statics, 0, parentMatrix);
 }
 
@@ -1121,7 +1191,9 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 		std::vector<Resource::MeshInstance> meshInstances = {};
 
 		const std::filesystem::path baseFilePath = modelEntry.assetPath.parent_path();
-		if (!ResolveModel(baseFilePath, gltfModel, vertices, indices, meshInstances))
+		const std::string fileName               = modelEntry.assetPath.stem().string(); // Filename sans extension.
+
+		if (!ResolveModel(fileName, baseFilePath, gltfModel, vertices, indices, meshInstances))
 		{
 			PRINT_ERROR("Failed resolving model from '{}'. Using fallback model.", assetPath);
 			outModelHandle = GetFallbackModel();
@@ -1129,7 +1201,9 @@ Handle<Model> AssetImporter<Model>::Import(const AssetEntry& modelEntry)
 		else
 		{
 			outModelHandle = Resource::AllocateNonOwning<Model>();
-			Resource::CreateModel(outModelHandle, std::move(vertices), std::move(indices), std::move(meshInstances));
+			Resource::CreateModel(
+			    fileName, outModelHandle, std::move(vertices), std::move(indices), std::move(meshInstances)
+			);
 		}
 	}
 

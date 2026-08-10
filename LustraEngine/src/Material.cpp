@@ -4,12 +4,18 @@
 
 namespace Resource
 {
-	void CreateMaterial(Handle<Material> materialHandle, const MaterialProperties& props, const Material::Maps& maps)
+	void CreateMaterial(
+	    std::string_view name,
+	    Handle<Material> materialHandle,
+	    const MaterialProperties& props,
+	    const Material::Maps& maps
+	)
 	{
 		Material& mat = GetRef(materialHandle);
 
 		mat.properties = props;
 		mat.maps       = maps;
+		mat.name       = std::string(name);
 	}
 
 	void DestroyMaterial(Handle<Material> materialHandle)

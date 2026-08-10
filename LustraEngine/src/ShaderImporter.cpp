@@ -22,7 +22,9 @@ Handle<Shader> AssetImporter<Shader>::Import(const AssetEntry& assetEntry)
 	};
 
 	const std::vector<std::string> includeDirs = {};
-	Resource::CreateShader(shaderHandle, compInfo, shaderMeta.compiler, includeDirs);
+	Resource::CreateShader(
+	    compInfo.shaderPath.filename().c_str(), shaderHandle, compInfo, shaderMeta.compiler, includeDirs
+	);
 
 	return shaderHandle;
 }

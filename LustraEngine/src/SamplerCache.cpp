@@ -57,10 +57,16 @@ void SamplerCache::Initialize()
 	// Assert that the default samplers are the first ones to be instantiated so indices line up correctly.
 	VALIDATE(Resource::PoolInstance<Resource::Sampler2D>().GetIndicesOfAliveObjects().empty());
 
-	for (const Resource::SamplerDesc2D& desc : defaultSamplers)
+	std::array<std::string_view, DefaultSamplerCount> samplerNames;
+
+	samplerNames[DefaultSamplerLinearRepeat] = "Linear Repeat Sampler";
+	samplerNames[DefaultSamplerLinearClamp]  = "Linear Clamp Sampler";
+	samplerNames[DefaultSamplerPointRepeat]  = "Point Repeat Sampler";
+	samplerNames[DefaultSamplerPointClamp]   = "Point Clamp Sampler";
+
+	for (uint32_t i = 0; i < defaultSamplers.size(); i++)
 	{
-		// Since there are no entries in the cache yet, this will always result in "create".
-		GetOrCreateSampler2D(desc);
+		RegisterSampler(samplerNames[i], defaultSamplers[i]);
 	}
 }
 
@@ -70,11 +76,7 @@ Handle<Resource::Sampler2D> SamplerCache::GetOrCreateSampler2D(const Resource::S
 
 	if (!m_samplerMap.contains(key))
 	{
-		Handle<Resource::Sampler2D> sampler2DHandle = Resource::Allocate<Resource::Sampler2D>();
-
-		Resource::CreateSampler2D(sampler2DHandle, samplerDesc2D);
-
-		m_samplerMap.emplace(key, sampler2DHandle);
+		RegisterSampler("Runtime Created Sampler", samplerDesc2D);
 	}
 
 	return m_samplerMap.at(key);
@@ -83,6 +85,16 @@ Handle<Resource::Sampler2D> SamplerCache::GetOrCreateSampler2D(const Resource::S
 Handle<Resource::Sampler2D> SamplerCache::GetDefaultSampler(DefaultSampler defaultSampler)
 {
 	return GetOrCreateSampler2D(defaultSamplers[defaultSampler]);
+}
+
+// TODO: This implementation feels a bit backwards and should probably be revisited.
+void SamplerCache::RegisterSampler(std::string_view name, const Resource::SamplerDesc2D& samplerDesc2D)
+{
+	Handle<Resource::Sampler2D> sampler2DHandle = Resource::Allocate<Resource::Sampler2D>();
+
+	Resource::CreateSampler2D(name, sampler2DHandle, samplerDesc2D);
+
+	m_samplerMap.emplace(::CreateSampler2DKey(samplerDesc2D), sampler2DHandle);
 }
 
 void SamplerCache::Destroy()

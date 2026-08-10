@@ -35,20 +35,25 @@ namespace Resource
 
 		TextureDesc2D desc;
 
+		// TODO: Remove this.
 		operator vk::Image() const
 		{
 			return allocation.image;
 		}
 	};
 
-	void CreateTexture2D(Handle<Texture2D> textureHandle, const TextureDesc2D& texDesc);
+	void CreateTexture2D(std::string_view name, Handle<Texture2D> textureHandle, const TextureDesc2D& texDesc);
 
+	// Will directly copy into the texture, assuming it is not going to be accesibly from the CPU after.
 	void CreateReadOnlyTexture2D(
-	    Handle<Texture2D> textureHandle, TextureDesc2D& texDesc, std::span<const std::byte> imageData
+	    std::string_view name,
+	    Handle<Texture2D> textureHandle,
+	    TextureDesc2D& texDesc,
+	    std::span<const std::byte> imageData
 	);
 	void DestroyTexture2D(Handle<Texture2D> tex);
 
-	void CreateDepthTexture(Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc);
+	void CreateDepthTexture(std::string_view name, Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc);
 
 	// Agnostic to the underlying usage of the texture. It simply re-uses the same texture desc that was used at
 	// creation with new dimensions.

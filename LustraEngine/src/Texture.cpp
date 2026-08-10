@@ -189,11 +189,16 @@ namespace
 namespace Resource
 {
 
-	void CreateTexture2D(Handle<Texture2D> textureHandle, const TextureDesc2D& texDesc)
+	void CreateTexture2D(std::string_view name, Handle<Texture2D> textureHandle, const TextureDesc2D& texDesc)
 	{
 		ENSURE(Get(textureHandle) != nullptr);
 
 		Texture2D& texture2D = GetRef(textureHandle);
+
+		if (!name.empty())
+		{
+			texture2D.name = name;
+		}
 
 		texture2D.allocation = AssertVk(AllocateTexture2D(texDesc));
 		texture2D.desc       = texDesc;
@@ -208,16 +213,22 @@ namespace Resource
 
 		texture2D.view = AssertVk(Graphics::gVkDevice.createImageView(viewInfo, Graphics::gAllocationCallbacks));
 
+		NameVk(Graphics::gVkDevice, texture2D.allocation.image, texture2D.name);
+		NameVk(Graphics::gVkDevice, texture2D.view, texture2D.name + ".View");
+		NameVma(Graphics::gVmaAllocator, texture2D.allocation.vmaAllocation, texture2D.name);
 	} // namespace Resource
 
 	void CreateReadOnlyTexture2D(
-	    Handle<Texture2D> textureHandle, TextureDesc2D& texDesc, std::span<const std::byte> imageData
+	    std::string_view name,
+	    Handle<Texture2D> textureHandle,
+	    TextureDesc2D& texDesc,
+	    std::span<const std::byte> imageData
 	)
 	{
 		// This texture is going to be copied to.
 		texDesc.usage = texDesc.usage | vk::ImageUsageFlagBits::eTransferDst;
 
-		CreateTexture2D(textureHandle, texDesc);
+		CreateTexture2D(name, textureHandle, texDesc);
 
 		// Upload data to created texture.
 		{
@@ -254,7 +265,7 @@ namespace Resource
 		}
 	}
 
-	void CreateDepthTexture(Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc)
+	void CreateDepthTexture(std::string_view name, Handle<Texture2D> depthTex, const TextureDesc2D& depthDesc)
 	{
 		vk::ImageAspectFlags depthAspect = AspectOf(depthDesc.format);
 		ENSURE_EX(
@@ -262,7 +273,7 @@ namespace Resource
 		    "Could not get valid depth aspect from format. Check that format is valid."
 		);
 
-		CreateTexture2D(depthTex, depthDesc);
+		CreateTexture2D(name, depthTex, depthDesc);
 	}
 
 	void ResizeTexture(Handle<Texture2D> tex, uint32_t newWidth, uint32_t newHeight)
@@ -278,7 +289,7 @@ namespace Resource
 		newDesc.width         = newWidth;
 		newDesc.height        = newHeight;
 
-		Resource::CreateTexture2D(tex, newDesc);
+		CreateTexture2D(texPtr->name, tex, newDesc);
 	}
 
 	[[nodiscard]] Handle<Texture2D> GetMissingTexture()
@@ -328,7 +339,7 @@ namespace Resource
 
 			missingTexHandle = Resource::AllocateNonOwning<Resource::Texture2D>();
 
-			Resource::CreateReadOnlyTexture2D(missingTexHandle, texDesc, albedoColors);
+			Resource::CreateReadOnlyTexture2D("MissingTexture", missingTexHandle, texDesc, albedoColors);
 		}
 
 		return missingTexHandle;

@@ -3,7 +3,9 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 
-AllocatedBuffer CreateBuffer(size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags)
+AllocatedBuffer CreateBuffer(
+    std::string_view name, size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
+)
 {
 	AllocatedBuffer buffer = {};
 
@@ -31,6 +33,8 @@ AllocatedBuffer CreateBuffer(size_t sizeInBytes, vk::BufferUsageFlags usageFlags
 		ENSURE(buffer.info.pMappedData != nullptr);
 	}
 
+	NameVk(Graphics::gVkDevice, buffer.buffer, name);
+	NameVma(Graphics::gVmaAllocator, buffer.alloc, name);
 	return buffer;
 }
 
@@ -45,6 +49,7 @@ void DestroyBuffer(AllocatedBuffer& buffer)
 AllocatedBuffer CreateUploadBuffer(const void* uploadData, size_t sizeInBytes)
 {
 	const AllocatedBuffer buffer = CreateBuffer(
+	    std::format("Upload Buffer ({}B)", sizeInBytes),
 	    sizeInBytes,
 	    vk::BufferUsageFlagBits::eTransferSrc,
 	    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
@@ -102,11 +107,15 @@ void CopyBuffers(AllocatedBuffer& dst, AllocatedBuffer& src, size_t sizeInBytes)
 }
 
 AllocatedBuffer CreateBufferFromCPUData(
-    void* uploadData, size_t sizeInBytes, vk::BufferUsageFlags usageFlags, VmaAllocationCreateFlags allocFlags
+    std::string_view name,
+    void* uploadData,
+    size_t sizeInBytes,
+    vk::BufferUsageFlags usageFlags,
+    VmaAllocationCreateFlags allocFlags
 )
 {
 	AllocatedBuffer dstBuffer =
-	    CreateBuffer(sizeInBytes, vk::BufferUsageFlagBits::eTransferDst | usageFlags, allocFlags);
+	    CreateBuffer(name, sizeInBytes, vk::BufferUsageFlagBits::eTransferDst | usageFlags, allocFlags);
 
 	UploadData(uploadData, sizeInBytes, dstBuffer);
 

@@ -70,6 +70,7 @@ namespace Resource
 	// NOTE: If input params are not intended to be used after calling this function, consider calling std::move() on
 	// them.
 	void CreateModel(
+	    std::string_view name,
 	    Handle<Model> modelHandle,
 	    std::vector<Vertex> vertices,
 	    std::vector<uint32_t> indices,

@@ -22,6 +22,6 @@ namespace Resource
 		vk::Sampler sampler = nullptr;
 	};
 
-	void CreateSampler2D(Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc);
+	void CreateSampler2D(std::string_view name, Handle<Sampler2D> samplerHandle, const SamplerDesc2D& desc);
 	void DestroySampler2D(Handle<Sampler2D> samplerHandle);
 } // namespace Resource

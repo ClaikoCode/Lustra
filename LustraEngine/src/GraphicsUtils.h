@@ -68,24 +68,24 @@ inline vk::Result AssertVk(VkResult result, std::source_location loc = std::sour
 }
 
 template <typename VkObject>
+    requires VULKAN_HPP_NAMESPACE::isVulkanHandleType<VkObject>::value
 inline void NameVk(vk::Device device, VkObject vkHandle, std::string_view name = "")
 {
+	ENSURE(device != nullptr && vkHandle != VK_NULL_HANDLE);
+
 	if (VULKAN_HPP_DEFAULT_DISPATCHER.vkSetDebugUtilsObjectNameEXT == nullptr)
 	{
 		PRINT_WARNING("Dispatcher does not have function for naming objects. Aborting.");
 		return;
 	}
 
-	if (vkHandle == VK_NULL_HANDLE)
+	if (name.empty())
 	{
+		PRINT_WARNING("Name is empty. Aborting.");
 		return;
 	}
 
 	std::string nameString = std::string(name);
-	if (name.empty())
-	{
-		nameString = std::string("Unnamed ") + vk::to_string(vk::Buffer::objectType);
-	}
 
 	static std::unordered_map<std::string, uint32_t> sNameCounts;
 
@@ -96,6 +96,20 @@ inline void NameVk(vk::Device device, VkObject vkHandle, std::string_view name =
 	}
 
 	AssertVk(device.setDebugUtilsObjectNameEXT(vkHandle, nameString));
+}
+
+// Will call vmaSetAllocationName() for human readable strings in a stats dump.
+inline void NameVma(VmaAllocator allocator, VmaAllocation allocation, std::string_view name)
+{
+	ENSURE(allocator != nullptr && allocation != nullptr);
+
+	if (name.empty())
+	{
+		PRINT_WARNING("Name is empty. Aborting.");
+		return;
+	}
+
+	vmaSetAllocationName(allocator, allocation, std::string(name).c_str());
 }
 
 // =================================

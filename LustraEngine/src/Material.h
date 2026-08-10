@@ -47,7 +47,12 @@ namespace Resource
 		uint32_t ormIndex      = 0;
 	};
 
-	void CreateMaterial(Handle<Material> materialHandle, const MaterialProperties& props, const Material::Maps& maps);
+	void CreateMaterial(
+	    std::string_view name,
+	    Handle<Material> materialHandle,
+	    const MaterialProperties& props,
+	    const Material::Maps& maps
+	);
 
 	void DestroyMaterial(Handle<Material> materialHandle);
 

@@ -8,6 +8,7 @@
 namespace Resource
 {
 	void CreateShader(
+	    std::string_view name,
 	    Handle<Shader> shaderHandle,
 	    const ShaderCompilationInfo& compInfo,
 	    ShaderCompiler compiler,
@@ -16,6 +17,8 @@ namespace Resource
 	{
 		Shader* shader = Get(shaderHandle);
 		ENSURE(shader != nullptr);
+
+		shader->name = name;
 
 		bool compSuccessful = false;
 		switch (compiler)
@@ -38,6 +41,8 @@ namespace Resource
 
 		shader->module =
 		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
+
+		NameVk(Graphics::gVkDevice, shader->module, shader->name);
 	}
 
 	void DestroyShader(Handle<Shader> shaderHandle)

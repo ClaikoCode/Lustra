@@ -16,6 +16,7 @@ namespace Resource
 	};
 
 	void CreateShader(
+	    std::string_view name,
 	    Handle<Shader> shaderHandle,
 	    const ShaderCompilationInfo& compInfo,
 	    ShaderCompiler compiler,

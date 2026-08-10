@@ -93,6 +93,7 @@ namespace Renderer
 		bindlessResources.samplerCache.Initialize();
 
 		bindlessResources.materialStorageBuffer = CreateBuffer(
+		    "Bindless Resources/Materials",
 		    sizeof(Resource::GPUMaterial) * BindlessResources::kMaxMaterials,
 		    vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
 		    VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT
@@ -124,6 +125,8 @@ namespace Renderer
 
 			bindlessResources.descriptorPool =
 			    AssertVk(Graphics::gVkDevice.createDescriptorPool(poolInfo, Graphics::gAllocationCallbacks));
+
+			NameVk(Graphics::gVkDevice, bindlessResources.descriptorPool, "Bindless Pool");
 		}
 
 		// Desc set layout
@@ -165,6 +168,8 @@ namespace Renderer
 
 			bindlessResources.layout =
 			    AssertVk(Graphics::gVkDevice.createDescriptorSetLayout(descLayoutInfo, Graphics::gAllocationCallbacks));
+
+			NameVk(Graphics::gVkDevice, bindlessResources.layout, "Bindless Layout");
 		}
 
 		// Allocate
@@ -175,6 +180,8 @@ namespace Renderer
 			allocInfo.setSetLayouts(bindlessResources.layout);
 
 			bindlessResources.set = AssertVk(Graphics::gVkDevice.allocateDescriptorSets(allocInfo))[0];
+
+			NameVk(Graphics::gVkDevice, bindlessResources.set, "Bindless Set");
 		}
 
 		// Write material buffer descriptor
@@ -315,16 +322,21 @@ namespace Renderer
 			);
 
 			gSceneDepth = Resource::Allocate<Resource::Texture2D>();
-			Resource::CreateDepthTexture(gSceneDepth, depthDesc);
+			Resource::CreateDepthTexture("Scene Depth", gSceneDepth, depthDesc);
 		}
 
 		// Per frame resources
 		{
-			for (FrameResources& frameResources : gFramesInFlight)
+			for (uint32_t i = 0; i < gFramesInFlight.size(); i++)
 			{
+				FrameResources& frameResources = gFramesInFlight[i];
+
 				const vk::CommandPoolCreateInfo commandPoolInfo = {.queueFamilyIndex = Graphics::graphicsQueue.index};
 				frameResources.commandPool =
 				    AssertVk(Graphics::gVkDevice.createCommandPool(commandPoolInfo, Graphics::gAllocationCallbacks));
+				NameVk(
+				    Graphics::gVkDevice, frameResources.commandPool, std::format("Frame Resources/Command Pool[{}]", i)
+				);
 
 				const vk::CommandBufferAllocateInfo commandAllocInfo = {
 				    .commandPool        = frameResources.commandPool,
@@ -334,14 +346,21 @@ namespace Renderer
 
 				frameResources.commandBuffer =
 				    AssertVk(Graphics::gVkDevice.allocateCommandBuffers(commandAllocInfo))[0];
+				NameVk(
+				    Graphics::gVkDevice,
+				    frameResources.commandBuffer,
+				    std::format("Frame Resources/Command Buffer[{}]", i)
+				);
 
 				frameResources.frameConstantsBuffer = CreateBuffer(
+				    std::format("Frame Resources/Constants[{}]", i),
 				    sizeof(FrameConstants),
 				    vk::BufferUsageFlagBits::eUniformBuffer,
 				    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
 				);
 
 				frameResources.instanceTransformBuffer = CreateBuffer(
+				    std::format("Frame Resources/Instance Transforms[{}]", i),
 				    gMaxMeshes * sizeof(InstanceData),
 				    vk::BufferUsageFlagBits::eStorageBuffer,
 				    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
@@ -368,6 +387,8 @@ namespace Renderer
 
 			gStaticDescriptorPool =
 			    AssertVk(Graphics::gVkDevice.createDescriptorPool(poolInfo, Graphics::gAllocationCallbacks));
+
+			NameVk(Graphics::gVkDevice, gStaticDescriptorPool, "Static Descriptor Pool");
 		}
 
 		// Graphics pipeline
@@ -586,15 +607,24 @@ namespace Renderer
 
 				gTimelineSemaphore =
 				    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
+
+				NameVk(Graphics::gVkDevice, gTimelineSemaphore, "Timeline Semaphore");
 			}
 
 			// Per frame image-acquire semaphores.
+			uint32_t count = 0;
 			for (FrameResources& frameResource : gFramesInFlight)
 			{
 				const vk::SemaphoreCreateInfo semaphoreInfo = {};
 
 				frameResource.imageAcquiredSemaphore =
 				    AssertVk(Graphics::gVkDevice.createSemaphore(semaphoreInfo, Graphics::gAllocationCallbacks));
+
+				NameVk(
+				    Graphics::gVkDevice,
+				    frameResource.imageAcquiredSemaphore,
+				    std::format("Frame Resources/Timeline Semaphore[{}]", count++)
+				);
 			}
 		}
 
@@ -602,6 +632,9 @@ namespace Renderer
 		{
 			AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
 		}
+
+		PRINT_DEBUG("Renderer successfully set up.");
+
 	} // namespace Renderer
 
 	void Destroy()
@@ -782,6 +815,7 @@ namespace Renderer
 		// with the semaphore.
 		// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of date
 		// code as an error, stopping the program. Using the C API lets the renderer recover in those cases.
+		ENSURE(VULKAN_HPP_DEFAULT_DISPATCHER.vkAcquireNextImageKHR != nullptr);
 		uint32_t imageAcquiredIndex = 0u;
 		const auto imageAcquireResultValue =
 		    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkAcquireNextImageKHR(
@@ -1067,6 +1101,7 @@ namespace Renderer
 			// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of
 			// date code as an error, stopping the program. Using the C API lets the renderer recover in those
 			// cases.
+			ENSURE(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR != nullptr);
 			const VkPresentInfoKHR& presentInfoC = presentInfo;
 			const auto presentResult =
 			    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR(graphicsQueue, &presentInfoC));

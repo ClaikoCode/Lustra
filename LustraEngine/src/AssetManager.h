@@ -1,13 +1,11 @@
 #pragma once
 
 #include "AssetEntry.h"
-#include "LustraLib/Logger.h"
 #include "LustraVulkan.h"
 #include "ShaderCompilerShared.h"
 
 #include <cstdint>
 #include <filesystem>
-#include <unordered_map>
 
 /*
 
@@ -34,6 +32,10 @@ enum AssetKey : UUID
 	AssetKeyShaderVSTest      = 14552202811960402000u,
 	AssetKeyShaderFSTest      = 8105587591145421000u,
 	AssetKeyModelTest         = 6005506655734169000u,
+	AssetKeySponza            = 18259996468618960000u,
+	AssetKeyCarConcept        = 7425371629934734000u,
+	AssetKeyDragon            = 6441717997686723000u,
+	AssetKeyBunny             = 8261371597526841000u,
 	AssetKeyShaderVSModelTest = 11576320714956073000u,
 	AssetKeyShaderFSModelTest = 15866899531044698000u,
 };
@@ -55,7 +57,7 @@ namespace Metadata
 	struct Model
 	{
 		bool useSkeleton = false;
-		bool useMats     = false;
+		bool useMats     = true;
 	};
 } // namespace Metadata
 

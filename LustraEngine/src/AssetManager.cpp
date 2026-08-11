@@ -1,10 +1,13 @@
 #include "AssetManager.h"
 
 #include "AssetRegistry.h"
+#include "LustraLib/Logger.h"
 #include "LustraPaths.h"
 #include "Model.h"
 #include "Shader.h"
 #include "ShaderCompilerDXC.h"
+
+#include <unordered_map>
 
 using AssetDatabase = std::unordered_map<AssetID, AssetEntry>;
 
@@ -53,15 +56,12 @@ namespace AssetManager
 
 		// Models
 		{
-			AddModel(
-			    AssetKeyModelTest,
-			    Lustra::Paths::ModelDir() / "Sponza/Sponza.gltf",
-			    // Lustra::Paths::ModelDir() / "CarConcept.glb",
-			    Metadata::Model{
-			        .useSkeleton = false,
-			        .useMats     = false,
-			    }
-			);
+			AddModel(AssetKeyModelTest, Lustra::Paths::ModelDir() / "CarConcept.glb", Metadata::Model{});
+
+			AddModel(AssetKeyCarConcept, Lustra::Paths::ModelDir() / "CarConcept.glb", Metadata::Model{});
+			AddModel(AssetKeySponza, Lustra::Paths::ModelDir() / "Sponza/Sponza.gltf", Metadata::Model{});
+			AddModel(AssetKeyBunny, Lustra::Paths::ModelDir() / "Bunny.glb", Metadata::Model{});
+			AddModel(AssetKeyDragon, Lustra::Paths::ModelDir() / "DragonDispersion.glb", Metadata::Model{});
 		}
 
 		PRINT_DEBUG("Asset manager successfully initialized.");

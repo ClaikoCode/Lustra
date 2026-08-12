@@ -3,7 +3,14 @@
 #include "ArgBuilderDXC.h"
 #include "LustraLib/Assert.h"
 #include "LustraLib/Utils.h"
-#include "dxc/WinAdapter.h"
+// Resolve symbol definitions across Win and Linux environments.
+#if defined(_WIN32)
+	#define WIN32_LEAN_AND_MEAN
+	#include <atlbase.h>
+	#include <windows.h>
+#else
+	#include "dxc/WinAdapter.h"
+#endif
 #include "dxc/dxcapi.h"
 
 #include <string_view>

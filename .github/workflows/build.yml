@@ -1,0 +1,29 @@
+name: Build
+
+on:
+  # Currently runs on dispatch to allow for easier development of CI
+  workflow_dispatch:
+  push:
+    branches: [ci-setup]
+
+jobs:
+  build: # Can be named anything.
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # Change this later (or not?). Allows to check both OSes during testing easily.
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout (with submodules)
+        # Can either be "uses" (prebuilt actions) or "run" (execute shell command).
+        uses: actions/checkout@v4 # Unsure if i need to pin verison here?
+        with:
+          submodules: recursive
+
+      - name: Show system environment
+        run: | # Multi line block follows.
+          echo "Running on ${{ matrix.os }}"
+          cmake --version
+

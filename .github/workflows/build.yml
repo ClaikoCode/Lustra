@@ -11,14 +11,15 @@ jobs:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # Change this later (or not?). Allows to check both OSes during testing easily.
+      # Allows to check results of both OS:es without the failure of one affecting the other.
+      fail-fast: false 
       matrix:
         os: [ubuntu-latest, windows-latest]
 
     steps:
       - name: Checkout (with submodules)
         # Can either be "uses" (prebuilt actions) or "run" (execute shell command).
-        uses: actions/checkout@v4 # Unsure if i need to pin verison here?
+        uses: actions/checkout@v4 # Conventional to pin version to get predictable execution.
         with:
           submodules: recursive
 
@@ -36,4 +37,21 @@ jobs:
           echo "Clang version: $(clang --version | head -n 1)"
           echo "Ninja version: $(ninja --version)"
           echo "CMake version: $(cmake --version | head -n 1)"
+
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        # This project vendors VMA and DXC is included in the SDK by default in modern versions.
+        with:
+          vulkan_version: 1.4.357.0
+          cache: true
+
+      - name: Configure (CMake)
+        shell: bash
+        # The flag allows building on Linux without requiring SDL windowing features (headless).
+        # Harmless flag for Windows.
+        run: cmake --preset x64-debug -DSDL_UNIX_CONSOLE_BUILD=ON
+
+      - name: Build
+        shell: bash
+        run: cmake --build --preset debug
 

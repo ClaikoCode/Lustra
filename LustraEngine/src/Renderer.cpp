@@ -630,7 +630,7 @@ namespace Renderer
 
 		// TODO: REMOVE LATER
 		{
-			AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
+			AssetRegistry::Resolve<Resource::Model>(AssetKeySponza);
 		}
 
 		PRINT_DEBUG("Renderer successfully set up.");
@@ -677,6 +677,12 @@ namespace Renderer
 			modelInstances.push_back({
 			    .modelHandle = modelTest,
 			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)),
+			});
+
+			Handle<Resource::Model> sponza = AssetRegistry::Resolve<Resource::Model>(AssetKeySponza);
+			modelInstances.push_back({
+			    .modelHandle = sponza,
+			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(4.0f)),
 			});
 		}
 

@@ -10,6 +10,12 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
 
+# Silences warning for extension __uuidof() that Windows COM API uses.
+set_source_files_properties(
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/ShaderCompilerDXC.cpp"
+	PROPERTIES COMPILE_OPTIONS "-Wno-language-extension-token"
+)
+
 add_executable(LustraEngine ${ENGINE_SOURCES})
 
 target_link_libraries(LustraEngine PRIVATE

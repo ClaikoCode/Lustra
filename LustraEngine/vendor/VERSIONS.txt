@@ -13,3 +13,5 @@ stb_image v2.30 - Acquired on 07/04/2026
 TinyGLTF v3.0.0 - Acquired on 07/04/2026
 
 VulkanMemoryAllocator (VMA) v3.3.0 - Acquired on 07/04/2026
+
+Dear ImGui v.1.92.9b - Acquired on 11/08/2026

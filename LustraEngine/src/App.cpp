@@ -4,6 +4,7 @@
 #include "AssetRegistry.h"
 #include "Graphics.h"
 #include "LustraLib/Logger.h"
+#include "LustraUI.h"
 #include "ModelImporter.h"
 #include "Renderer.h"
 #include "Resource.h"
@@ -36,6 +37,7 @@ App::~App()
 bool App::RunApp()
 {
 	Graphics::SetupVulkan(m_name, m_window);
+	Lustra::UI::Initialize(m_window.GetWindow());
 	AssetManager::Setup();
 	Renderer::Setup();
 
@@ -65,6 +67,10 @@ bool App::RunApp()
 			}
 		}
 
+		// Start UI frame.
+		Lustra::UI::ProcessEvent(&event);
+		Lustra::UI::NewFrame();
+
 		// TODO: Move to some Game::Update() function.
 		std::vector<Renderer::ModelInstance> modelInstances = {};
 		{
@@ -79,6 +85,7 @@ bool App::RunApp()
 
 		if (context.skipToNextFrame)
 		{
+			Lustra::UI::EndFrame();
 			continue;
 		}
 
@@ -87,6 +94,12 @@ bool App::RunApp()
 			Renderer::Update(context, modelInstances);
 
 			Renderer::Render(context, modelInstances);
+
+			Lustra::UI::RenderAndEndFrame(
+			    Renderer::GetFrameCommandBuffer(context),
+			    Graphics::gSwapchain.images[context.imageAcquiredIndex],
+			    Graphics::gSwapchain.views[context.imageAcquiredIndex]
+			);
 		}
 
 		// End, submit, and present
@@ -96,6 +109,7 @@ bool App::RunApp()
 
 	Graphics::WaitForDevice();
 
+	Lustra::UI::Destroy();
 	Renderer::Destroy();
 	AssetManager::Destroy();
 	Resource::ClearPoolsGPUMemory();

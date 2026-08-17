@@ -56,7 +56,7 @@ namespace AssetManager
 
 		// Models
 		{
-			AddModel(AssetKeyModelTest, Lustra::Paths::ModelDir() / "CarConcept.glb", Metadata::Model{});
+			AddModel(AssetKeyModelTest, Lustra::Paths::ModelDir() / "Bunny.glb", Metadata::Model{});
 
 			AddModel(AssetKeyCarConcept, Lustra::Paths::ModelDir() / "CarConcept.glb", Metadata::Model{});
 			AddModel(AssetKeySponza, Lustra::Paths::ModelDir() / "Sponza/Sponza.gltf", Metadata::Model{});

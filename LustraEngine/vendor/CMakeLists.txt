@@ -50,3 +50,5 @@ set_target_properties(ktx PROPERTIES SYSTEM TRUE)
 
 add_library(spirv-reflect "${CMAKE_CURRENT_SOURCE_DIR}/spirv-reflect/spirv-reflect/spirv_reflect.cpp")
 target_include_directories(spirv-reflect SYSTEM INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/spirv-reflect")
+
+add_subdirectory(imgui)

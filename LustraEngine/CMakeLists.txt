@@ -29,6 +29,7 @@ target_link_libraries(LustraEngine PRIVATE
 	SDL3::SDL3-static
 	spirv-reflect
 	ktx
+	imgui
 )
 
 # Copy executable files to Run folder.

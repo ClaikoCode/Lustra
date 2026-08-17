@@ -628,11 +628,6 @@ namespace Renderer
 			}
 		}
 
-		// TODO: REMOVE LATER
-		{
-			AssetRegistry::Resolve<Resource::Model>(AssetKeySponza);
-		}
-
 		PRINT_DEBUG("Renderer successfully set up.");
 
 	} // namespace Renderer
@@ -667,70 +662,57 @@ namespace Renderer
 		}
 	}
 
-	void Render()
+	RenderContext BeginFrame()
 	{
-		// Process draw calls
-		// TODO: Move to some Update() function.
-		std::vector<ModelInstance> modelInstances = {};
+		// Make sure all resources are loaded on the GPU.
 		{
-			Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
-			modelInstances.push_back({
-			    .modelHandle = modelTest,
-			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)),
-			});
+			const bool shouldUpdateBindlessResources =
+			    sShouldUpdateMaterialBuffer || sShouldUpdateSamplers || sShouldUpdateTextures;
 
-			Handle<Resource::Model> sponza = AssetRegistry::Resolve<Resource::Model>(AssetKeySponza);
-			modelInstances.push_back({
-			    .modelHandle = sponza,
-			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(4.0f)),
-			});
-		}
+			if (shouldUpdateBindlessResources)
+			{
+				// Wait before uploading to ensure any frames in flights are guaranteed to be done using their
+				// resources.
+				Graphics::WaitForDevice();
+			}
 
-		const bool shouldUpdateBindlessResources =
-		    sShouldUpdateMaterialBuffer || sShouldUpdateSamplers || sShouldUpdateTextures;
+			if (sShouldUpdateMaterialBuffer)
+			{
+				UpdateMaterialBuffer(gBindlessResources);
+				sShouldUpdateMaterialBuffer = false;
+			}
 
-		if (shouldUpdateBindlessResources)
-		{
-			// Wait before uploading to ensure any frames in flights are guaranteed to be done using their resources.
-			Graphics::WaitForDevice();
-		}
+			if (sShouldUpdateSamplers)
+			{
+				UpdateSamplers(gBindlessResources);
+				sShouldUpdateSamplers = false;
+			}
 
-		if (sShouldUpdateMaterialBuffer)
-		{
-			UpdateMaterialBuffer(gBindlessResources);
-			sShouldUpdateMaterialBuffer = false;
-		}
+			if (sShouldUpdateTextures)
+			{
+				UpdateTextures(gBindlessResources);
+				sShouldUpdateTextures = false;
+			}
 
-		if (sShouldUpdateSamplers)
-		{
-			UpdateSamplers(gBindlessResources);
-			sShouldUpdateSamplers = false;
-		}
+			if (sShouldRecreateSwapchain)
+			{
+				PRINT_LOG("Recreating swapchain...");
 
-		if (sShouldUpdateTextures)
-		{
-			UpdateTextures(gBindlessResources);
-			sShouldUpdateTextures = false;
-		}
+				Graphics::WaitForDevice();
 
-		if (sShouldRecreateSwapchain)
-		{
-			PRINT_LOG("Recreating swapchain...");
+				ENSURE(Graphics::gWindowPtr != nullptr);
 
-			Graphics::WaitForDevice();
+				Graphics::gSwapchain.Destroy();
+				Graphics::CreateSwapchain(*Graphics::gWindowPtr);
 
-			ENSURE(Graphics::gWindowPtr != nullptr);
+				// TODO: Make a better way of tracking resources that have any properties bound to the swapchain and
+				// make sure to recreate them along with the swapchain.
+				Resource::ResizeTexture(gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
 
-			Graphics::gSwapchain.Destroy();
-			Graphics::CreateSwapchain(*Graphics::gWindowPtr);
+				sShouldRecreateSwapchain = false;
 
-			// TODO: Make a better way of tracking resources that have any properties bound to the swapchain and make
-			// sure to recreate them along with the swapchain.
-			Resource::ResizeTexture(gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
-
-			sShouldRecreateSwapchain = false;
-
-			PRINT_LOG("Done recreating swapchain!");
+				PRINT_LOG("Done recreating swapchain!");
+			}
 		}
 
 		const uint32_t frameResourceIndex = gFrameIndex++ % gMaxFramesInFlight;
@@ -747,72 +729,6 @@ namespace Renderer
 
 		// GPU has signaled that resources are free to use so its time to fetch them.
 		const FrameResources& frameResources = gFramesInFlight[frameResourceIndex];
-
-		static const auto startTime = std::chrono::steady_clock::now();
-		const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
-
-		// Write frame CPU data to GPU buffers.
-		{
-			// Write transform data.
-			{
-				InstanceData* const instanceDataArray =
-				    reinterpret_cast<InstanceData*>(frameResources.instanceTransformBuffer.info.pMappedData);
-				uint32_t transformIndex = 0u;
-				for (const ModelInstance& modelInstance : modelInstances)
-				{
-					const Resource::Model* model = Resource::Get(modelInstance.modelHandle);
-					for (const Resource::MeshInstance& meshInstance : model->instances)
-					{
-						instanceDataArray[transformIndex].transform =
-						    modelInstance.worldMatrix * meshInstance.transform;
-
-						// Increment for each mesh transform copied.
-						transformIndex++;
-					}
-				}
-
-				// Flush
-				vmaFlushAllocation(
-				    Graphics::gVmaAllocator, frameResources.instanceTransformBuffer.alloc, 0, VK_WHOLE_SIZE
-				);
-			}
-
-			// Write frame constant data.
-			{
-				FrameConstants fc = {};
-
-				const float angle  = t * glm::radians(45.0f); // 45 deg/sec orbit
-				const float radius = 10.0f;                   // distance from the model
-
-				// A camera sitting back on + Z, looking at the origin.
-				const glm::vec3 eye = {
-				    radius * std::sin(angle),
-				    5.0f,
-				    radius * std::cos(angle),
-				};
-				const glm::vec3 center = {0.0f, 0.0f, 0.0f};
-				const glm::vec3 up     = {0.0f, 1.0f, 0.0f};
-				fc.view                = glm::lookAt(eye, center, up);
-
-				const float aspect =
-				    static_cast<float>(Graphics::gSwapchain.width) / static_cast<float>(Graphics::gSwapchain.height);
-				fc.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
-
-				// Reverse Y since GLM assumes OpenGL standard which has NDC +Y as up when Vulkan assumes +Y as down.
-				fc.proj[1][1] *= -1.0f;
-
-				// Copy over the data.
-				memcpy(frameResources.frameConstantsBuffer.info.pMappedData, &fc, sizeof(fc));
-
-				// Flush
-				vmaFlushAllocation(
-				    Graphics::gVmaAllocator, frameResources.frameConstantsBuffer.alloc, 0, VK_WHOLE_SIZE
-				);
-			}
-		}
-
-		// Prep for recording new commands.
-		AssertVk(Graphics::gVkDevice.resetCommandPool(frameResources.commandPool));
 
 		// This semaphore will be used to check if the image we are going to be rendering to later is free to write to.
 		const vk::Semaphore imageAcquireSemaphore = frameResources.imageAcquiredSemaphore;
@@ -840,7 +756,10 @@ namespace Renderer
 			    "Image acquire resulted in '{}'. Asking for swapchain recreation and returning immediately.",
 			    vk::to_string(imageAcquireResultValue)
 			);
-			return;
+
+			RenderContext context   = {};
+			context.skipToNextFrame = true;
+			return context;
 		}
 		// Image is suboptimal and swapchain should be recreated but the frame can continue.
 		else if (imageAcquireResultValue == vk::Result::eSuboptimalKHR)
@@ -858,63 +777,145 @@ namespace Renderer
 			AssertVk(imageAcquireResultValue);
 		}
 
-		const uint32_t imageIndex             = imageAcquiredIndex;
-		const vk::CommandBuffer commandBuffer = frameResources.commandBuffer;
+		// Prep for recording new commands.
+		AssertVk(Graphics::gVkDevice.resetCommandPool(frameResources.commandPool));
+
+		vk::CommandBuffer frameCommandBuffer = frameResources.commandBuffer;
+		AssertVk(frameCommandBuffer.begin(
+		    vk::CommandBufferBeginInfo{
+		        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		    }
+		));
+
+		const vk::Image swapchainImage = Graphics::gSwapchain.images[imageAcquiredIndex];
+
+		// Setup swapchain image and depth buffer for drawing.
+		const std::array layoutBarriers = {
+		    vk::ImageMemoryBarrier2{
+		        .srcStageMask  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		        .srcAccessMask = vk::AccessFlagBits2::eNone,
+		        .dstStageMask  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		        .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+		        .oldLayout     = vk::ImageLayout::eUndefined,
+		        .newLayout     = vk::ImageLayout::eColorAttachmentOptimal,
+		        .image         = swapchainImage,
+		        .subresourceRange =
+		            {
+		                .aspectMask     = vk::ImageAspectFlagBits::eColor,
+		                .baseMipLevel   = 0,
+		                .levelCount     = 1,
+		                .baseArrayLayer = 0,
+		                .layerCount     = 1,
+		            }
+
+		    },
+		    vk::ImageMemoryBarrier2{
+		        .srcStageMask  = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+		        .srcAccessMask = vk::AccessFlagBits2::eNone,
+		        .dstStageMask =
+		            vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		        .dstAccessMask    = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		        .oldLayout        = vk::ImageLayout::eUndefined,
+		        .newLayout        = vk::ImageLayout::eDepthAttachmentOptimal,
+		        .image            = *Resource::Get(gSceneDepth),
+		        .subresourceRange = {
+		            .aspectMask     = vk::ImageAspectFlagBits::eDepth,
+		            .baseMipLevel   = 0,
+		            .levelCount     = 1,
+		            .baseArrayLayer = 0,
+		            .layerCount     = 1,
+		        }
+		    }
+		};
+
+		const vk::DependencyInfo depInfo = {
+		    .imageMemoryBarrierCount = layoutBarriers.size(), .pImageMemoryBarriers = layoutBarriers.data()
+		};
+		frameCommandBuffer.pipelineBarrier2(depInfo);
+
+		RenderContext renderContex = {
+		    .frameResourceIndex = frameResourceIndex,
+		    .imageAcquiredIndex = imageAcquiredIndex,
+		    .signalValue        = signalValue,
+		    .skipToNextFrame    = false,
+		};
+
+		return renderContex;
+	}
+
+	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances)
+	{
+		FrameResources& frameResources = gFramesInFlight[context.frameResourceIndex];
+
+		// Write transform data.
+		{
+			InstanceData* const instanceDataArray =
+			    reinterpret_cast<InstanceData*>(frameResources.instanceTransformBuffer.info.pMappedData);
+			uint32_t transformIndex = 0u;
+			for (const ModelInstance& modelInstance : modelInstances)
+			{
+				const Resource::Model* model = Resource::Get(modelInstance.modelHandle);
+				for (const Resource::MeshInstance& meshInstance : model->instances)
+				{
+					instanceDataArray[transformIndex].transform = modelInstance.worldMatrix * meshInstance.transform;
+
+					// Increment for each mesh transform copied.
+					transformIndex++;
+				}
+			}
+
+			// Flush
+			vmaFlushAllocation(Graphics::gVmaAllocator, frameResources.instanceTransformBuffer.alloc, 0, VK_WHOLE_SIZE);
+		}
+
+		// Write frame constant data.
+		{
+			FrameConstants fc = {};
+
+			// TODO: Move to an earlier step.
+			static const auto startTime = std::chrono::steady_clock::now();
+			const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
+
+			const float angle  = t * glm::radians(45.0f); // 45 deg/sec orbit
+			const float radius = 10.0f;                   // distance from the model
+
+			// A camera sitting back on + Z, looking at the origin.
+			const glm::vec3 eye = {
+			    radius * std::sin(angle),
+			    5.0f,
+			    radius * std::cos(angle),
+			};
+			const glm::vec3 center = {0.0f, 0.0f, 0.0f};
+			const glm::vec3 up     = {0.0f, 1.0f, 0.0f};
+			fc.view                = glm::lookAt(eye, center, up);
+
+			const float aspect =
+			    static_cast<float>(Graphics::gSwapchain.width) / static_cast<float>(Graphics::gSwapchain.height);
+			fc.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
+
+			// Reverse Y since GLM assumes OpenGL standard which has NDC +Y as up when Vulkan assumes +Y as down.
+			fc.proj[1][1] *= -1.0f;
+
+			// Copy over the data.
+			memcpy(frameResources.frameConstantsBuffer.info.pMappedData, &fc, sizeof(fc));
+
+			// Flush
+			vmaFlushAllocation(Graphics::gVmaAllocator, frameResources.frameConstantsBuffer.alloc, 0, VK_WHOLE_SIZE);
+		}
+	}
+
+	void Render(RenderContext& renderContext, const std::vector<ModelInstance>& modelInstances)
+	{
+		FrameResources& frameResources = gFramesInFlight[renderContext.frameResourceIndex];
+
+		const vk::CommandBuffer frameCommandBuffer = frameResources.commandBuffer;
 
 		// Render the frame.
 		{
-			const vk::Image swapchainImage    = Graphics::gSwapchain.images[imageIndex];
-			const vk::ImageView swapchainView = Graphics::gSwapchain.views[imageIndex];
+			const vk::ImageView swapchainView = Graphics::gSwapchain.views[renderContext.imageAcquiredIndex];
 
 			const uint32_t targetWidth  = Graphics::gSwapchain.width;
 			const uint32_t targetHeight = Graphics::gSwapchain.height;
-
-			const vk::CommandBufferBeginInfo cmdBeginInfo = {.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-
-			AssertVk(commandBuffer.begin(cmdBeginInfo));
-
-			const std::array layoutBarriers = {
-			    vk::ImageMemoryBarrier2{
-			        .srcStageMask  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			        .srcAccessMask = vk::AccessFlagBits2::eNone,
-			        .dstStageMask  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			        .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
-			        .oldLayout     = vk::ImageLayout::eUndefined,
-			        .newLayout     = vk::ImageLayout::eColorAttachmentOptimal,
-			        .image         = swapchainImage,
-			        .subresourceRange =
-			            {
-			                .aspectMask     = vk::ImageAspectFlagBits::eColor,
-			                .baseMipLevel   = 0,
-			                .levelCount     = 1,
-			                .baseArrayLayer = 0,
-			                .layerCount     = 1,
-			            }
-
-			    },
-			    vk::ImageMemoryBarrier2{
-			        .srcStageMask     = vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-			        .srcAccessMask    = vk::AccessFlagBits2::eNone,
-			        .dstStageMask     = vk::PipelineStageFlagBits2::eEarlyFragmentTests |
-			                            vk::PipelineStageFlagBits2::eLateFragmentTests,
-			        .dstAccessMask    = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-			        .oldLayout        = vk::ImageLayout::eUndefined,
-			        .newLayout        = vk::ImageLayout::eDepthAttachmentOptimal,
-			        .image            = *Resource::Get(gSceneDepth),
-			        .subresourceRange = {
-			            .aspectMask     = vk::ImageAspectFlagBits::eDepth,
-			            .baseMipLevel   = 0,
-			            .levelCount     = 1,
-			            .baseArrayLayer = 0,
-			            .layerCount     = 1,
-			        }
-			    }
-			};
-
-			const vk::DependencyInfo depInfo = {
-			    .imageMemoryBarrierCount = layoutBarriers.size(), .pImageMemoryBarriers = layoutBarriers.data()
-			};
-			commandBuffer.pipelineBarrier2(depInfo);
 
 			constexpr std::array clearColor                   = {0.0f, 0.0f, 0.0f, 1.0f};
 			const vk::RenderingAttachmentInfo colorAttachInfo = {
@@ -944,7 +945,7 @@ namespace Renderer
 			};
 
 			// Begin dynamic rendering!!!!!!!!!!!!!!!!!!!!
-			commandBuffer.beginRendering(renderingInfo);
+			frameCommandBuffer.beginRendering(renderingInfo);
 
 			{
 				const vk::Viewport viewport = {
@@ -955,18 +956,18 @@ namespace Renderer
 				    .minDepth = 0.0f,
 				    .maxDepth = 1.0f
 				};
-				commandBuffer.setViewport(0, 1, &viewport);
+				frameCommandBuffer.setViewport(0, 1, &viewport);
 
 				const vk::Rect2D scissor = {
 				    .offset = {.x = 0, .y = 0},
 				    .extent = {.width = targetWidth, .height = targetHeight},
 				};
-				commandBuffer.setScissor(0, 1, &scissor);
+				frameCommandBuffer.setScissor(0, 1, &scissor);
 
-				commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, gModelTestPipeline);
+				frameCommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, gModelTestPipeline);
 
 				const vk::PipelineLayout currentLayout = gModelTestPipelineLayout;
-				commandBuffer.bindDescriptorSets(
+				frameCommandBuffer.bindDescriptorSets(
 				    vk::PipelineBindPoint::eGraphics,
 				    currentLayout,
 				    0,
@@ -980,8 +981,8 @@ namespace Renderer
 					const Resource::Model& model = *Resource::Get(modelInstance.modelHandle);
 
 					// Bind geometry buffers per model.
-					commandBuffer.bindVertexBuffers(0, model.geomSource.gpuMesh.vertexBuffer.buffer, {0});
-					commandBuffer.bindIndexBuffer(
+					frameCommandBuffer.bindVertexBuffers(0, model.geomSource.gpuMesh.vertexBuffer.buffer, {0});
+					frameCommandBuffer.bindIndexBuffer(
 					    model.geomSource.gpuMesh.indexBuffer.buffer, 0, vk::IndexType::eUint32
 					);
 
@@ -990,7 +991,7 @@ namespace Renderer
 					{
 						const uint32_t transformIndex = baseTransformIndex + instanceIndex;
 						// Push the transform index per mesh instance.
-						commandBuffer.pushConstants<uint32_t>(
+						frameCommandBuffer.pushConstants<uint32_t>(
 						    currentLayout, vk::ShaderStageFlagBits::eVertex, 0, transformIndex
 						);
 
@@ -1000,11 +1001,13 @@ namespace Renderer
 							const Resource::PrimitiveRange& range = submesh.range;
 
 							// Push material index per submesh.
-							commandBuffer.pushConstants<uint32_t>(
+							frameCommandBuffer.pushConstants<uint32_t>(
 							    currentLayout, vk::ShaderStageFlagBits::eFragment, sizeof(uint32_t), submesh.mat.index
 							);
 
-							commandBuffer.drawIndexed(range.indexCount, 1, range.startIndex, range.vertexOffset, 0);
+							frameCommandBuffer.drawIndexed(
+							    range.indexCount, 1, range.startIndex, range.vertexOffset, 0
+							);
 						}
 					}
 
@@ -1013,119 +1016,136 @@ namespace Renderer
 				}
 			}
 
-			commandBuffer.endRendering();
-
-			// Transition from color attachement to presentation.
-			const vk::ImageMemoryBarrier2 presentLayoutBarrier = {
-			    .srcStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			    .srcAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite,
-			    .dstStageMask     = vk::PipelineStageFlagBits2::eNone,
-			    .dstAccessMask    = vk::AccessFlagBits2::eNone,
-			    .oldLayout        = vk::ImageLayout::eColorAttachmentOptimal,
-			    .newLayout        = vk::ImageLayout::ePresentSrcKHR,
-			    .image            = swapchainImage,
-			    .subresourceRange = {
-			        .aspectMask     = vk::ImageAspectFlagBits::eColor,
-			        .baseMipLevel   = 0,
-			        .levelCount     = 1,
-			        .baseArrayLayer = 0,
-			        .layerCount     = 1,
-			    }
-			};
-
-			const vk::DependencyInfo presentDepInfo = {
-			    .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &presentLayoutBarrier
-			};
-			commandBuffer.pipelineBarrier2(presentDepInfo);
-
-			AssertVk(commandBuffer.end());
+			frameCommandBuffer.endRendering();
 		}
+	}
 
-		// Submit and Present
+	void EndFrame(RenderContext& context)
+	{
+		FrameResources& resources = gFramesInFlight[context.frameResourceIndex];
+
+		// Transition from color attachement to presentation.
+		const vk::ImageMemoryBarrier2 presentLayoutBarrier = {
+		    .srcStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		    .srcAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite,
+		    .dstStageMask     = vk::PipelineStageFlagBits2::eNone,
+		    .dstAccessMask    = vk::AccessFlagBits2::eNone,
+		    .oldLayout        = vk::ImageLayout::eColorAttachmentOptimal,
+		    .newLayout        = vk::ImageLayout::ePresentSrcKHR,
+		    .image            = Graphics::gSwapchain.images[context.imageAcquiredIndex],
+		    .subresourceRange = {
+		        .aspectMask     = vk::ImageAspectFlagBits::eColor,
+		        .baseMipLevel   = 0,
+		        .levelCount     = 1,
+		        .baseArrayLayer = 0,
+		        .layerCount     = 1,
+		    }
+		};
+
+		const vk::DependencyInfo presentDepInfo = {
+		    .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &presentLayoutBarrier
+		};
+		resources.commandBuffer.pipelineBarrier2(presentDepInfo);
+
+		AssertVk(resources.commandBuffer.end());
+	}
+
+	void SubmitAndPresent(RenderContext& context)
+	{
+		const vk::Semaphore renderingCompleteSemaphore = Graphics::gSwapchain.semaphores[context.imageAcquiredIndex];
+		const vk::SwapchainKHR swapchain               = Graphics::gSwapchain.swapchain;
+		const vk::Queue graphicsQueue                  = Graphics::graphicsQueue.queue;
+		const FrameResources& frameResources           = gFramesInFlight[context.frameResourceIndex];
+
+		// We have the index for which swapchain image we are going to write to but now we have to wait for the
+		// image at that index to actually be available. This semaphore is tied to the swapchain image so as
+		// soon as the image at the index that was given to prior can be written to, a signal is sent.
+		// NOTE:
+		// This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
+		// semaphore to be signaled at the point of trying to bind the image for color output in the pipeline.
+		// Earlier pipeline stages are free to run.
+		// TODO:
+		// Work should be split into different command buffers because this wait waits on the FIRST
+		// instance of color output attachement, even if the target is not the swapchain. This wait should only
+		// be for the command buffer that has commands that will write to the swapchain, all other kind of work
+		// should be separate to avoid unecessary GPU stalls.
+		const vk::SemaphoreSubmitInfo imageAcquiredWaitInfo = {
+		    .semaphore = frameResources.imageAcquiredSemaphore,
+		    .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput
+		};
+
+		const std::array semaphoreSignals = {
+		    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once
+		    // all GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
+		    vk::SemaphoreSubmitInfo{
+		        .semaphore = renderingCompleteSemaphore, .stageMask = vk::PipelineStageFlagBits2::eAllGraphics
+		    },
+		    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames
+		    // signal value to finally communicate that all resources associated with this frame has been completed.
+		    vk::SemaphoreSubmitInfo{
+		        .semaphore = gTimelineSemaphore,
+		        .value     = context.signalValue,
+		        .stageMask = vk::PipelineStageFlagBits2::eAllCommands
+		    }
+		};
+
+		const vk::CommandBufferSubmitInfo cmdSubmitInfo = {.commandBuffer = frameResources.commandBuffer};
+		const vk::SubmitInfo2 submitInfo                = {
+		    .waitSemaphoreInfoCount = 1,
+		    // Semaphores to be waited on before executing command buffer.
+		    .pWaitSemaphoreInfos      = &imageAcquiredWaitInfo,
+		    .commandBufferInfoCount   = 1,
+		    .pCommandBufferInfos      = &cmdSubmitInfo,
+		    .signalSemaphoreInfoCount = semaphoreSignals.size(),
+		    // Semaphores to signal once certain stages of the pipeline have been completed.
+		    .pSignalSemaphoreInfos = semaphoreSignals.data()
+		};
+
+		// Submit all commands.
+		AssertVk(graphicsQueue.submit2(1, &submitInfo, VK_NULL_HANDLE));
+
+		const vk::PresentInfoKHR presentInfo = {
+		    .waitSemaphoreCount = 1,
+		    // Waits for the semaphore that will trigger once all graphcis rendering is complete.
+		    .pWaitSemaphores = &renderingCompleteSemaphore,
+		    .swapchainCount  = 1,
+		    .pSwapchains     = &swapchain,
+		    .pImageIndices   = &context.imageAcquiredIndex,
+		    .pResults        = nullptr
+		};
+
+		// Present the swapchain image.
+		// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of
+		// date code as an error, stopping the program. Using the C API lets the renderer recover in those
+		// cases.
+		ENSURE(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR != nullptr);
+		const VkPresentInfoKHR& presentInfoC = presentInfo;
+		const auto presentResult =
+		    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR(graphicsQueue, &presentInfoC));
+
+		// Because this is the last thing that is done this frame, both suboptimal and out of date are handled
+		// NEXT frame.
+		if (presentResult == vk::Result::eSuboptimalKHR || presentResult == vk::Result::eErrorOutOfDateKHR)
 		{
-			const vk::Semaphore renderingCompleteSemaphore = Graphics::gSwapchain.semaphores[imageIndex];
-			const vk::SwapchainKHR swapchain               = Graphics::gSwapchain.swapchain;
-			const vk::Queue graphicsQueue                  = Graphics::graphicsQueue.queue;
-
-			// We have the index for which swapchain image we are going to write to but now we have to wait for the
-			// image at that index to actually be available. This semaphore is tied to the swapchain image so as
-			// soon as the image at the index that was given to prior can be written to, a signal is sent.
-			// NOTE:
-			// This is not a CPU wait. The GPU will run all commands submitted but will stop and wait for the
-			// semaphore to be signaled at the point of trying to bind the image for color output in the pipeline.
-			// Earlier pipeline stages are free to run.
-			// TODO:
-			// Work should be split into different command buffers because this wait waits on the FIRST
-			// instance of color output attachement, even if the target is not the swapchain. This wait should only
-			// be for the command buffer that has commands that will write to the swapchain, all other kind of work
-			// should be separate to avoid unecessary GPU stalls.
-			const vk::SemaphoreSubmitInfo imageAcquiredWaitInfo = {
-			    .semaphore = imageAcquireSemaphore, .stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput
-			};
-
-			const std::array semaphoreSignals = {
-			    // This binary semaphore is used by the presentation engine. The GPU will signal this semaphore once
-			    // all GRAPHICS commmands has been completed, meaning the swapchain image is ready to be presented.
-			    vk::SemaphoreSubmitInfo{
-			        .semaphore = renderingCompleteSemaphore, .stageMask = vk::PipelineStageFlagBits2::eAllGraphics
-			    },
-			    // Once ALL commands are done (not only graphics), signal the timeline semaphore with this frames
-			    // signal value to finally communicate that all resources associated with this frame has been completed.
-			    vk::SemaphoreSubmitInfo{
-			        .semaphore = gTimelineSemaphore,
-			        .value     = signalValue,
-			        .stageMask = vk::PipelineStageFlagBits2::eAllCommands
-			    }
-			};
-
-			const vk::CommandBufferSubmitInfo cmdSubmitInfo = {.commandBuffer = commandBuffer};
-			const vk::SubmitInfo2 submitInfo                = {
-			    .waitSemaphoreInfoCount = 1,
-			    // Semaphores to be waited on before executing command buffer.
-			    .pWaitSemaphoreInfos      = &imageAcquiredWaitInfo,
-			    .commandBufferInfoCount   = 1,
-			    .pCommandBufferInfos      = &cmdSubmitInfo,
-			    .signalSemaphoreInfoCount = semaphoreSignals.size(),
-			    // Semaphores to signal once certain stages of the pipeline have been completed.
-			    .pSignalSemaphoreInfos = semaphoreSignals.data()
-			};
-
-			// Submit all commands.
-			AssertVk(graphicsQueue.submit2(1, &submitInfo, VK_NULL_HANDLE));
-
-			const vk::PresentInfoKHR presentInfo = {
-			    .waitSemaphoreCount = 1,
-			    // Waits for the semaphore that will trigger once all graphcis rendering is complete.
-			    .pWaitSemaphores = &renderingCompleteSemaphore,
-			    .swapchainCount  = 1,
-			    .pSwapchains     = &swapchain,
-			    .pImageIndices   = &imageIndex,
-			    .pResults        = nullptr
-			};
-
-			// Present the swapchain image.
-			// NOTE: This uses the C API because vulkan.hpp without exceptions (understandably) asserts an out of
-			// date code as an error, stopping the program. Using the C API lets the renderer recover in those
-			// cases.
-			ENSURE(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR != nullptr);
-			const VkPresentInfoKHR& presentInfoC = presentInfo;
-			const auto presentResult =
-			    static_cast<vk::Result>(VULKAN_HPP_DEFAULT_DISPATCHER.vkQueuePresentKHR(graphicsQueue, &presentInfoC));
-
-			// Because this is the last thing that is done this frame, both suboptimal and out of date are handled
-			// NEXT frame.
-			if (presentResult == vk::Result::eSuboptimalKHR || presentResult == vk::Result::eErrorOutOfDateKHR)
-			{
-				PRINT_DEBUG(
-				    "Present resulted in '{}'. Swapchain will be asked to be recreated the coming frame.",
-				    vk::to_string(presentResult)
-				);
-				sShouldRecreateSwapchain = true;
-			}
-			else
-			{
-				AssertVk(presentResult);
-			}
+			PRINT_DEBUG(
+			    "Present resulted in '{}'. Swapchain will be asked to be recreated the coming frame.",
+			    vk::to_string(presentResult)
+			);
+			sShouldRecreateSwapchain = true;
 		}
+		else
+		{
+			AssertVk(presentResult);
+		}
+	}
+
+	FrameResources& GetFrameResources(RenderContext& context)
+	{
+		return gFramesInFlight[context.frameResourceIndex];
+	}
+
+	vk::CommandBuffer GetFrameCommandBuffer(RenderContext& context)
+	{
+		return GetFrameResources(context).commandBuffer;
 	}
 } // namespace Renderer

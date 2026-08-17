@@ -64,6 +64,14 @@ namespace Renderer
 		glm::mat4 worldMatrix               = glm::mat4(1.0f);
 	};
 
+	struct RenderContext
+	{
+		uint32_t frameResourceIndex; // The resources index used for this frame.
+		uint32_t imageAcquiredIndex; // The image to be written to this frame.
+		uint64_t signalValue;        // Value to signal when submitted.
+		bool skipToNextFrame;
+	};
+
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
 	constexpr uint32_t gMaxMeshes = 4096u;
@@ -90,5 +98,22 @@ namespace Renderer
 	void Setup();
 	void Destroy();
 
-	void Render();
+	// Only returns once an image has been acquired to write to.
+	// Resets the command pool.
+	[[nodiscard]] RenderContext BeginFrame();
+
+	// Write frame CPU data to GPU buffers.
+	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances);
+
+	// Record commands.
+	void Render(RenderContext& context, const std::vector<ModelInstance>& modelInstances);
+
+	// Transition to presentation.
+	void EndFrame(RenderContext& context);
+
+	// Submit frame command buffer and signal synchornization barriers.
+	void SubmitAndPresent(RenderContext& context);
+
+	FrameResources& GetFrameResources(RenderContext& context);
+	vk::CommandBuffer GetFrameCommandBuffer(RenderContext& context);
 } // namespace Renderer

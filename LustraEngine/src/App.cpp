@@ -1,8 +1,10 @@
 #include "App.h"
 
 #include "AssetManager.h"
+#include "AssetRegistry.h"
 #include "Graphics.h"
 #include "LustraLib/Logger.h"
+#include "ModelImporter.h"
 #include "Renderer.h"
 #include "Resource.h"
 #include "SDL3/SDL.h"
@@ -37,11 +39,15 @@ bool App::RunApp()
 	AssetManager::Setup();
 	Renderer::Setup();
 
+	// TODO: Move to some Game::Init()
+	Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
+
 	SDL_Event event = {};
 	bool shouldQuit = false;
 	while (!shouldQuit)
 	{
 		SDL_PollEvent(&event);
+
 		if (event.type == SDL_EVENT_QUIT)
 		{
 			shouldQuit = true;
@@ -55,10 +61,37 @@ bool App::RunApp()
 			if (event.key.key == SDLK_ESCAPE)
 			{
 				shouldQuit = true;
+				continue;
 			}
 		}
 
-		Renderer::Render();
+		// TODO: Move to some Game::Update() function.
+		std::vector<Renderer::ModelInstance> modelInstances = {};
+		{
+			modelInstances.push_back({
+			    .modelHandle = modelTest,
+			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(15.0f)),
+			});
+		}
+
+		// Start render frame.
+		Renderer::RenderContext context = Renderer::BeginFrame();
+
+		if (context.skipToNextFrame)
+		{
+			continue;
+		}
+
+		// Record rendering commands.
+		{
+			Renderer::Update(context, modelInstances);
+
+			Renderer::Render(context, modelInstances);
+		}
+
+		// End, submit, and present
+		Renderer::EndFrame(context);
+		Renderer::SubmitAndPresent(context);
 	}
 
 	Graphics::WaitForDevice();

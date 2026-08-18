@@ -5,11 +5,13 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
 
-#include <cstddef>
+#include <vector>
 
 namespace
 {
 	constexpr uint32_t kImGuiTextureDescriptorCount = 512u;
+
+	std::vector<Lustra::UI::Panel> gPanels = {};
 } // namespace
 
 namespace Lustra::UI
@@ -79,6 +81,25 @@ namespace Lustra::UI
 		ImGui::EndFrame();
 	}
 
+	void AddPanel(const Panel& panel)
+	{
+		ENSURE(!panel.name.empty());
+
+		if (panel.panelData == nullptr)
+		{
+			PRINT_ERROR("UI Panel '{}' has no attached panel data. Aborting.", panel.name);
+			return;
+		}
+
+		if (panel.UIDrawCallback == nullptr)
+		{
+			PRINT_ERROR("UI Panel '{}' has no attached draw callback. Aborting.", panel.name);
+			return;
+		}
+
+		::gPanels.push_back(panel);
+	}
+
 	void RenderAndEndFrame(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageView view)
 	{
 		const vk::ImageMemoryBarrier2 sceneToUi = {
@@ -124,18 +145,25 @@ namespace Lustra::UI
 		};
 		commandBuffer.beginRendering(renderInfo);
 
-		static bool showDemo = true;
-		ImGui::ShowDemoWindow(&showDemo);
-
-		// Draw all ui.
+		// Iterate through UI Panels.
+		ImGuiWindowFlags windowFlags = ImGuiWindowFlags_::ImGuiWindowFlags_None;
+		for (const Panel& panel : ::gPanels)
 		{
-			ImGui::Render();
-			ImDrawData* drawData   = ImGui::GetDrawData();
-			const bool isMinimized = (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f);
-			if (!isMinimized)
-			{
-				ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
-			}
+			ImGui::Begin(panel.name.c_str(), nullptr, windowFlags);
+
+			panel.UIDrawCallback(panel.panelData);
+
+			ImGui::End();
+		}
+
+		// Render all UI.
+		ImGui::Render();
+
+		ImDrawData* drawData   = ImGui::GetDrawData();
+		const bool isMinimized = (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f);
+		if (!isMinimized)
+		{
+			ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
 		}
 
 		commandBuffer.endRendering();
@@ -147,4 +175,5 @@ namespace Lustra::UI
 		ImGui_ImplSDL3_Shutdown();
 		ImGui::DestroyContext();
 	}
+
 } // namespace Lustra::UI

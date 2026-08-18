@@ -11,3 +11,5 @@ add_library(imgui STATIC
 )
 
 target_include_directories(imgui SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan SDL3::SDL3-static)
+

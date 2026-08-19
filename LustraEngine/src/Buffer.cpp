@@ -138,7 +138,7 @@ void UploadData(const void* data, size_t sizeInBytes, AllocatedBuffer& dst)
 		{
 			PRINT_WARNING(
 			    "Uploading data to GPU that is not device local. Every GPU read goes through the PCIe lane. If the GPU "
-			    "accesses this data frequently, consider making it local."
+			    "accesses this data frequently, consider making it device local."
 			);
 		}
 
@@ -155,10 +155,6 @@ void UploadData(const void* data, size_t sizeInBytes, AllocatedBuffer& dst)
 
 		// Destroy temporary upload buffer.
 		DestroyBuffer(uploadBuffer);
-	}
-	else if (isHostVisible)
-	{
-		// Rare and should hopefully never happen.
 	}
 	else
 	{

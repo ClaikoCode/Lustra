@@ -361,7 +361,7 @@ namespace Renderer
 
 				frameResources.instanceTransformBuffer = CreateBuffer(
 				    std::format("Frame Resources/Instance Transforms[{}]", i),
-				    gMaxMeshes * sizeof(InstanceData),
+				    gMaxInstanceTransforms * sizeof(glm::mat4),
 				    vk::BufferUsageFlagBits::eStorageBuffer,
 				    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT
 				);
@@ -849,23 +849,25 @@ namespace Renderer
 
 		// Write transform data.
 		{
-			InstanceData* const instanceDataArray =
-			    reinterpret_cast<InstanceData*>(frameResources.instanceTransformBuffer.info.pMappedData);
+			// Static vector to avoid heap allocs on each frame.
+			static std::vector<glm::mat4> instanceTransforms(gMaxInstanceTransforms, glm::mat4(1.0f));
+
 			uint32_t transformIndex = 0u;
 			for (const ModelInstance& modelInstance : modelInstances)
 			{
 				const Resource::Model* model = Resource::Get(modelInstance.modelHandle);
 				for (const Resource::MeshInstance& meshInstance : model->instances)
 				{
-					instanceDataArray[transformIndex].transform = modelInstance.worldMatrix * meshInstance.transform;
+					instanceTransforms[transformIndex] = modelInstance.worldMatrix * meshInstance.transform;
 
 					// Increment for each mesh transform copied.
 					transformIndex++;
 				}
 			}
 
-			// Flush
-			vmaFlushAllocation(Graphics::gVmaAllocator, frameResources.instanceTransformBuffer.alloc, 0, VK_WHOLE_SIZE);
+			UploadData(
+			    instanceTransforms.data(), transformIndex * sizeof(glm::mat4), frameResources.instanceTransformBuffer
+			);
 		}
 
 		// Write frame constant data.

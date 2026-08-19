@@ -9,11 +9,6 @@
 
 namespace Renderer
 {
-	struct InstanceData
-	{
-		glm::mat4 transform;
-	};
-
 	struct FrameConstants
 	{
 		glm::mat4 view;
@@ -26,7 +21,6 @@ namespace Renderer
 		vk::CommandBuffer commandBuffer      = nullptr; // Will be destroyed with command pool
 		vk::Semaphore imageAcquiredSemaphore = nullptr; // Binary semaphore
 
-		// TODO: Find a better way to use this storage buffer without relying on BAR to be fully supported.
 		AllocatedBuffer instanceTransformBuffer;
 		AllocatedBuffer frameConstantsBuffer;
 
@@ -74,7 +68,7 @@ namespace Renderer
 
 	constexpr uint32_t gMaxFramesInFlight = 2u;
 
-	constexpr uint32_t gMaxMeshes = 4096u;
+	constexpr uint32_t gMaxInstanceTransforms = 4096u;
 
 	inline Handle<Resource::Texture2D> gSceneDepth;
 	inline std::array<FrameResources, gMaxFramesInFlight> gFramesInFlight = {};

@@ -9,11 +9,6 @@ struct FrameConstants
 	matrix proj;
 };
 
-struct InstanceData
-{
-	matrix transform;
-};
-
 struct VSInput
 {
 	float3 pos : POSITION;
@@ -33,12 +28,12 @@ struct VSOutput
 
 // Bindings
 [[vk::push_constant]] Push pc;
-[[vk::binding(0, 1)]] ConstantBuffer<FrameConstants> uFrame;      // Collapses to a uniform buffer.
-[[vk::binding(1, 1)]] StructuredBuffer<InstanceData> bTransforms; // Collapses to a read-only storage buffer.
+[[vk::binding(0, 1)]] ConstantBuffer<FrameConstants> uFrame;  // Collapses to a uniform buffer.
+[[vk::binding(1, 1)]] StructuredBuffer<float4x4> bTransforms; // Collapses to a read-only storage buffer.
 
 VSOutput main(VSInput input)
 {
-	matrix modelTransform = bTransforms[pc.transformIndex].transform;
+	float4x4 modelTransform = bTransforms[pc.transformIndex];
 
 	float4 worldPos = mul(modelTransform, float4(input.pos, 1.0));
 

@@ -44,8 +44,9 @@ bool App::RunApp()
 	// TODO: Move to some Game::Init()
 	Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
 
-	SDL_Event event = {};
-	bool shouldQuit = false;
+	SDL_Event event  = {};
+	bool shouldQuit  = false;
+	bool isMinimized = false;
 	while (!shouldQuit)
 	{
 		SDL_PollEvent(&event);
@@ -66,6 +67,32 @@ bool App::RunApp()
 				continue;
 			}
 		}
+
+		if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+		{
+			PRINT_DEBUG("Window has resized.");
+
+			uint32_t width;
+			uint32_t height;
+			m_window.GetExtentInPixels(width, height);
+
+			if (width == 0 || height == 0)
+			{
+				isMinimized = true;
+			}
+			else
+			{
+				Graphics::RecreateSwapchain();
+				isMinimized = false;
+			}
+		}
+
+		if (isMinimized)
+		{
+			continue;
+		}
+
+		// === START OF GAME AND RENDER LOOP ===
 
 		// Start UI frame.
 		Lustra::UI::ProcessEvent(&event);

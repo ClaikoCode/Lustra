@@ -103,4 +103,13 @@ namespace Graphics
 	// NOTE: Currently returns graphics queue. Will switch to transfer queue when async transfer becomes of interest.
 	CommandQueue GetQueueUsedForTransfers();
 
+	// Will wait for device, destroy, and re-create the swapchain.
+	// Will also publish swapchain update to all subscribers.
+	void RecreateSwapchain();
+
+	// NOTE: The reference passed in MUST not be destructed after the call. Make sure its lifetime is equal to or longer
+	// than the graphics core lifetime.
+	void SubscribeToSwapchainUpdates(bool& subscriber);
+
+	void PublishSwapchainUpdate();
 } // namespace Graphics

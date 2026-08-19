@@ -136,6 +136,12 @@ namespace
 		return SDL_Vulkan_GetPresentationSupport(Graphics::gVkInstance, Graphics::gVkPhysicalDevice, queueFamilyIndex);
 	}
 
+	// Using bool* const is a type that violates the contract that vector expects.
+	// Using reference_wrapper instead ensures the "constness" of not reassigning the object that holds the memory that
+	// will be changed.
+	// Currently, all subscribers will have the same lifetime as the graphics core, so no dangling pointers to memory
+	// should come up.
+	std::vector<std::reference_wrapper<bool>> swapchainUpdateSubscribers = {};
 } // namespace
 
 namespace Graphics
@@ -663,16 +669,22 @@ namespace Graphics
 
 		const vk::SurfaceCapabilitiesKHR surfaceCapabilities = surfaceCapabilities2.surfaceCapabilities;
 
+		uint32_t newWidth  = 0;
+		uint32_t newHeight = 0;
+
 		// If using Wayland then extent is decided from window.
 		if (surfaceCapabilities2.surfaceCapabilities.currentExtent.width == 0xFFFFFFFF)
 		{
-			window.GetExtentInPixels(gSwapchain.width, gSwapchain.height);
+			window.GetExtentInPixels(newWidth, newHeight);
 		}
 		else
 		{
-			gSwapchain.width  = surfaceCapabilities.currentExtent.width;
-			gSwapchain.height = surfaceCapabilities.currentExtent.height;
+			newWidth  = surfaceCapabilities.currentExtent.width;
+			newHeight = surfaceCapabilities.currentExtent.height;
 		}
+
+		gSwapchain.width  = newWidth;
+		gSwapchain.height = newHeight;
 
 		// Makes sure requested image count is guranteed to be between 2 and max supported image count.
 		const uint32_t requestedImageCount =
@@ -761,6 +773,37 @@ namespace Graphics
 		ENSURE(graphicsQueue.queue != VK_NULL_HANDLE);
 
 		return graphicsQueue;
+	}
+
+	void RecreateSwapchain()
+	{
+		ENSURE(gWindowPtr != nullptr);
+
+		PRINT_LOG("Recreating swapchain...");
+
+		WaitForDevice();
+
+		gSwapchain.Destroy();
+		CreateSwapchain(*gWindowPtr);
+
+		// Notify all subscribers that swapchain has been updated.
+		PublishSwapchainUpdate();
+
+		PRINT_LOG("Done recreating swapchain!");
+	}
+
+	void SubscribeToSwapchainUpdates(bool& subscriber)
+	{
+		::swapchainUpdateSubscribers.emplace_back(subscriber);
+	}
+
+	void PublishSwapchainUpdate()
+	{
+		// Implicit cast from std::reference_wrapper to plain reference.
+		for (bool& subscriber : ::swapchainUpdateSubscribers)
+		{
+			subscriber = true;
+		}
 	}
 } // namespace Graphics
 

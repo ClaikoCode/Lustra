@@ -78,11 +78,14 @@ namespace
 		return vertInputInfo;
 	}
 
-	bool sShouldRecreateSwapchain    = false;
-	bool sShouldUpdateMaterialBuffer = true;
-	bool sShouldUpdateSamplers       = true;
-	bool sShouldUpdateTextures       = true;
-	uint64_t sNextSignalValue        = Renderer::gMaxFramesInFlight + 1;
+	bool sShouldRecreateSwapchain                 = false;
+	bool sShouldUpdateSwapchainDependentResources = false;
+	bool sShouldUpdateMaterialBuffer              = true;
+	bool sShouldUpdateSamplers                    = true;
+	bool sShouldUpdateTextures                    = true;
+	uint64_t sNextSignalValue                     = Renderer::gMaxFramesInFlight + 1;
+
+	std::vector<Handle<Resource::Texture2D>> swapchainDependentTextures;
 
 } // namespace
 
@@ -315,6 +318,9 @@ namespace Renderer
 	{
 		CreateBindlessResources(gBindlessResources);
 
+		// Subscribe to swapchain updates.
+		Graphics::SubscribeToSwapchainUpdates(sShouldUpdateSwapchainDependentResources);
+
 		// Scene depth creation
 		{
 			Resource::TextureDesc2D depthDesc = Resource::CreateDepthDesc(
@@ -323,6 +329,8 @@ namespace Renderer
 
 			gSceneDepth = Resource::Allocate<Resource::Texture2D>();
 			Resource::CreateDepthTexture("Scene Depth", gSceneDepth, depthDesc);
+
+			::swapchainDependentTextures.push_back(gSceneDepth);
 		}
 
 		// Per frame resources
@@ -674,44 +682,45 @@ namespace Renderer
 				// Wait before uploading to ensure any frames in flights are guaranteed to be done using their
 				// resources.
 				Graphics::WaitForDevice();
-			}
 
-			if (sShouldUpdateMaterialBuffer)
-			{
-				UpdateMaterialBuffer(gBindlessResources);
-				sShouldUpdateMaterialBuffer = false;
-			}
+				if (sShouldUpdateMaterialBuffer)
+				{
+					UpdateMaterialBuffer(gBindlessResources);
+					sShouldUpdateMaterialBuffer = false;
+				}
 
-			if (sShouldUpdateSamplers)
-			{
-				UpdateSamplers(gBindlessResources);
-				sShouldUpdateSamplers = false;
-			}
+				if (sShouldUpdateSamplers)
+				{
+					UpdateSamplers(gBindlessResources);
+					sShouldUpdateSamplers = false;
+				}
 
-			if (sShouldUpdateTextures)
-			{
-				UpdateTextures(gBindlessResources);
-				sShouldUpdateTextures = false;
+				if (sShouldUpdateTextures)
+				{
+					UpdateTextures(gBindlessResources);
+					sShouldUpdateTextures = false;
+				}
 			}
 
 			if (sShouldRecreateSwapchain)
 			{
-				PRINT_LOG("Recreating swapchain...");
-
-				Graphics::WaitForDevice();
-
-				ENSURE(Graphics::gWindowPtr != nullptr);
-
-				Graphics::gSwapchain.Destroy();
-				Graphics::CreateSwapchain(*Graphics::gWindowPtr);
-
-				// TODO: Make a better way of tracking resources that have any properties bound to the swapchain and
-				// make sure to recreate them along with the swapchain.
-				Resource::ResizeTexture(gSceneDepth, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
+				Graphics::RecreateSwapchain();
 
 				sShouldRecreateSwapchain = false;
+			}
 
-				PRINT_LOG("Done recreating swapchain!");
+			// NOTE: This should always be after recreate swapchain check as it will signal the bool being checked
+			// below.
+			if (sShouldUpdateSwapchainDependentResources)
+			{
+				for (Handle<Resource::Texture2D> tex2DHandle : ::swapchainDependentTextures)
+				{
+					PRINT_LOG("Resizing texture '{}'.", Resource::GetRef(tex2DHandle).name);
+
+					Resource::ResizeTexture(tex2DHandle, Graphics::gSwapchain.width, Graphics::gSwapchain.height);
+				}
+
+				sShouldUpdateSwapchainDependentResources = false;
 			}
 		}
 

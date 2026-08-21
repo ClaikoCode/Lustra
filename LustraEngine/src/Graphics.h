@@ -79,6 +79,9 @@ namespace Graphics
 	// Transfer command pool, bound to device lifetime.
 	inline vk::CommandPool gTransferPool = {};
 
+	// Global transient graphics command pool.
+	inline vk::CommandPool gGraphicsCommandPool = {};
+
 	// TODO: Find a better way to solve this.
 	inline const Window* gWindowPtr = nullptr;
 
@@ -112,4 +115,7 @@ namespace Graphics
 	void SubscribeToSwapchainUpdates(bool& subscriber);
 
 	void PublishSwapchainUpdate();
+
+	vk::CommandBuffer BeginSingleTimeCommands();
+	void EndSingleTimeCommands(vk::CommandBuffer cmd);
 } // namespace Graphics

@@ -180,6 +180,7 @@ namespace Graphics
 		PRINT_DEBUG("Tearing down Vulkan.");
 
 		gVkDevice.destroyCommandPool(gTransferPool, gAllocationCallbacks);
+		gVkDevice.destroyCommandPool(gGraphicsCommandPool, gAllocationCallbacks);
 
 		if constexpr (gUseValidationLayers)
 		{
@@ -554,6 +555,17 @@ namespace Graphics
 			gTransferPool = AssertVk(gVkDevice.createCommandPool(transferPoolInfo, gAllocationCallbacks));
 			NameVk(gVkDevice, gTransferPool, "Transfer Command Pool");
 		}
+
+		// Create global graphics pool
+		{
+			const vk::CommandPoolCreateInfo graphicsPoolInfo = {
+			    .flags            = vk::CommandPoolCreateFlagBits::eTransient,
+			    .queueFamilyIndex = graphicsQueue.index,
+			};
+
+			gGraphicsCommandPool = AssertVk(gVkDevice.createCommandPool(graphicsPoolInfo, gAllocationCallbacks));
+			NameVk(gVkDevice, gGraphicsCommandPool, "Graphics Command Pool");
+		}
 	}
 
 	void SetupDebugMessenger()
@@ -804,6 +816,56 @@ namespace Graphics
 		{
 			subscriber = true;
 		}
+	}
+
+	vk::CommandBuffer BeginSingleTimeCommands()
+	{
+		vk::CommandBufferAllocateInfo commandBufferInfo = {
+		    .commandPool        = gGraphicsCommandPool,
+		    .level              = vk::CommandBufferLevel::ePrimary,
+		    .commandBufferCount = 1,
+		};
+
+		vk::CommandBuffer cmdBuffer = AssertVk(gVkDevice.allocateCommandBuffers(commandBufferInfo))[0];
+
+		vk::CommandBufferBeginInfo beginInfo = {
+		    .flags            = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+		    .pInheritanceInfo = nullptr,
+		};
+
+		AssertVk(cmdBuffer.begin(beginInfo));
+
+		return cmdBuffer;
+	}
+
+	void EndSingleTimeCommands(vk::CommandBuffer cmd)
+	{
+		AssertVk(cmd.end());
+
+		vk::FenceCreateInfo fenceInfo = {};
+		vk::Fence fence = AssertVk(Graphics::gVkDevice.createFence(fenceInfo, Graphics::gAllocationCallbacks));
+
+		vk::CommandBufferSubmitInfo cmdSubmitInfo = {
+		    .commandBuffer = cmd,
+		};
+
+		vk::SubmitInfo2 submitInfo = {};
+		submitInfo.setCommandBufferInfos(cmdSubmitInfo);
+
+		AssertVk(graphicsQueue.queue.submit2(submitInfo, fence));
+
+		vk::Result result = Graphics::gVkDevice.waitForFences(fence, vk::True, GraphicsUtils::TimeoutTimeS(5));
+
+		// TODO: Check how this timeout can still allow app to continue.
+		if (result == vk::Result::eTimeout)
+		{
+			PRINT_ERROR("Single time command buffer timed out.");
+		}
+
+		AssertVk(result);
+
+		Graphics::gVkDevice.freeCommandBuffers(Graphics::gGraphicsCommandPool, cmd);
+		Graphics::gVkDevice.destroyFence(fence, Graphics::gAllocationCallbacks);
 	}
 } // namespace Graphics
 

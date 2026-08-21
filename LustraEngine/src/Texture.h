@@ -25,7 +25,7 @@ namespace Resource
 		uint32_t height           = UINT32_MAX;
 		vk::Format format         = vk::Format::eUndefined;
 		vk::ImageUsageFlags usage = {}; // TODO:move this out and pass it as an argument in functions instead.
-		uint32_t mipLevels        = 1;  // 0 is assumed to be MAX mip levels.
+		uint32_t mipLevels        = 0;  // 0 is assumed to be MAX mip levels.
 	};
 
 	struct Texture2D : ResourceTag
@@ -35,7 +35,9 @@ namespace Resource
 
 		TextureDesc2D desc;
 
-		// TODO: Remove this.
+		// Has to be updated when layout is transitioned in a pipeline barrier.
+		vk::ImageLayout layout;
+
 		operator vk::Image() const
 		{
 			return allocation.image;
@@ -62,10 +64,11 @@ namespace Resource
 	inline TextureDesc2D CreateDepthDesc(uint32_t width, uint32_t height, vk::Format depthFormat)
 	{
 		return TextureDesc2D{
-		    .width  = width,
-		    .height = height,
-		    .format = depthFormat,
-		    .usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+		    .width     = width,
+		    .height    = height,
+		    .format    = depthFormat,
+		    .usage     = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+		    .mipLevels = 1,
 		};
 	}
 

@@ -24,6 +24,13 @@ class Window
 	void* GetWindow() const;
 
 	void GetExtentInPixels(uint32_t& width, uint32_t& height) const;
+	void UpdateScaling();
+
+	// === PUBLIC VARS ===
+
+	// Has to be updated if window resizes.
+	float scalingX = 1.0f;
+	float scalingY = 1.0f;
 
   private:
 	void* m_windowPtr = nullptr;

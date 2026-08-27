@@ -29,6 +29,8 @@ void Window::InitWindow(const char* name, uint32_t width, uint32_t height)
 	);
 
 	ASSERT_SDL(m_windowPtr != nullptr, "SDL could not create window");
+
+	UpdateScaling();
 }
 
 void Window::DestroyWindow()
@@ -61,6 +63,23 @@ void Window::GetExtentInPixels(uint32_t& width, uint32_t& height) const
 
 	width  = static_cast<uint32_t>(w);
 	height = static_cast<uint32_t>(h);
+}
+
+void Window::UpdateScaling()
+{
+	SDL_Window* sdlWindow = reinterpret_cast<SDL_Window*>(m_windowPtr);
+
+	int windowSizeX;
+	int windowSizeY;
+
+	ASSERT_SDL(SDL_GetWindowSize(sdlWindow, &windowSizeX, &windowSizeY), "Cant fetch SDL window size.");
+
+	uint32_t pixelWidth;
+	uint32_t pixelHeight;
+	GetExtentInPixels(pixelWidth, pixelHeight);
+
+	scalingX = static_cast<float>(pixelWidth) / static_cast<float>(windowSizeX);
+	scalingY = static_cast<float>(pixelHeight) / static_cast<float>(windowSizeY);
 }
 
 Window::~Window()

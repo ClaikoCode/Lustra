@@ -14,6 +14,7 @@
 
 namespace
 {
+
 } // namespace
 
 App::App(const char* appName) : m_name(appName)
@@ -44,47 +45,81 @@ bool App::RunApp()
 	// TODO: Move to some Game::Init()
 	Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
 
-	SDL_Event event  = {};
 	bool shouldQuit  = false;
 	bool isMinimized = false;
 	while (!shouldQuit)
 	{
-		SDL_PollEvent(&event);
+		float mouseDeltaX = 0.0f;
+		float mouseDeltaY = 0.0f;
 
-		if (event.type == SDL_EVENT_QUIT)
+		SDL_Event event = {};
+		while (SDL_PollEvent(&event))
 		{
-			shouldQuit = true;
-			continue;
-		}
-
-		if (event.type == SDL_EVENT_KEY_DOWN)
-		{
-			PRINT_LOG("Key {} was pressed!", SDL_GetKeyName(event.key.key));
-
-			if (event.key.key == SDLK_ESCAPE)
+			if (event.type == SDL_EVENT_QUIT)
 			{
 				shouldQuit = true;
 				continue;
 			}
+
+			if (event.type == SDL_EVENT_KEY_DOWN)
+			{
+				PRINT_LOG("Key {} was pressed!", SDL_GetKeyName(event.key.key));
+
+				if (event.key.key == SDLK_ESCAPE)
+				{
+					shouldQuit = true;
+					continue;
+				}
+
+				if (event.key.key == SDLK_R)
+				{
+					SDL_Window* windowPtr = reinterpret_cast<SDL_Window*>(m_window.GetWindow());
+
+					bool currentMode = SDL_GetWindowRelativeMouseMode(windowPtr);
+
+					SDL_SetWindowRelativeMouseMode(windowPtr, !currentMode);
+				}
+			}
+
+			if (event.type == SDL_EVENT_MOUSE_MOTION)
+			{
+				if (!SDL_GetWindowRelativeMouseMode(reinterpret_cast<SDL_Window*>(m_window.GetWindow())))
+				{
+					float x;
+					float y;
+					SDL_GetMouseState(&x, &y);
+				}
+				else
+				{
+					SDL_GetRelativeMouseState(&mouseDeltaX, &mouseDeltaY);
+				}
+			}
+
+			if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+			{
+				PRINT_DEBUG("Window has resized.");
+
+				uint32_t width;
+				uint32_t height;
+				m_window.GetExtentInPixels(width, height);
+
+				if (width == 0 || height == 0)
+				{
+					isMinimized = true;
+				}
+				else
+				{
+					Graphics::RecreateSwapchain();
+					isMinimized = false;
+				}
+
+				m_window.UpdateScaling();
+			}
 		}
 
-		if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+		if (shouldQuit)
 		{
-			PRINT_DEBUG("Window has resized.");
-
-			uint32_t width;
-			uint32_t height;
-			m_window.GetExtentInPixels(width, height);
-
-			if (width == 0 || height == 0)
-			{
-				isMinimized = true;
-			}
-			else
-			{
-				Graphics::RecreateSwapchain();
-				isMinimized = false;
-			}
+			break;
 		}
 
 		if (isMinimized)

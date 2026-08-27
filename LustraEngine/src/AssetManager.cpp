@@ -30,18 +30,6 @@ namespace AssetManager
 		// Shaders
 		{
 			AddShader(
-			    AssetKeyShaderFSTest,
-			    Lustra::Paths::HLSLDir() / "FSTest.hlsl",
-			    Metadata::Shader{.shaderType = ShaderTypeFS, .compiler = ShaderCompiler::DXC}
-			);
-
-			AddShader(
-			    AssetKeyShaderVSTest,
-			    Lustra::Paths::HLSLDir() / "VSTest.hlsl",
-			    Metadata::Shader{.shaderType = ShaderTypeVS, .compiler = ShaderCompiler::DXC}
-			);
-
-			AddShader(
 			    AssetKeyShaderFSModelTest,
 			    Lustra::Paths::HLSLDir() / "FSModelTest.hlsl",
 			    Metadata::Shader{.shaderType = ShaderTypeFS, .compiler = ShaderCompiler::DXC}

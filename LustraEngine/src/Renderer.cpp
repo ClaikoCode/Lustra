@@ -403,13 +403,6 @@ namespace Renderer
 		{
 			vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {.setLayoutCount = 0, .pushConstantRangeCount = 0};
 
-			gHelloTrianglePipelineLayout =
-			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
-
-			std::array shaderStages = {
-			    ::CreateShaderStageInfo(AssetKeyShaderVSTest), ::CreateShaderStageInfo(AssetKeyShaderFSTest)
-			};
-
 			vk::PipelineVertexInputStateCreateInfo vertInputInfo = ::CreateVertexInputStateDefault();
 
 			const vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
@@ -467,27 +460,6 @@ namespace Renderer
 			    .pColorAttachmentFormats = &Graphics::gTargetSurfaceFormat.format,
 			    .depthAttachmentFormat   = Graphics::gTargetDepthFormat
 			};
-
-			// Bring it all together to create the actual pipeline object.
-			vk::GraphicsPipelineCreateInfo pipelineInfo = {
-			    .pNext               = &renderInfo,
-			    .stageCount          = shaderStages.size(),
-			    .pStages             = shaderStages.data(),
-			    .pVertexInputState   = &vertInputInfo,
-			    .pInputAssemblyState = &inputAssemblyInfo,
-			    .pViewportState      = &viewportInfo,
-			    .pRasterizationState = &rasterInfo,
-			    .pMultisampleState   = &multiSampleInfo,
-			    .pDepthStencilState  = &depthStencilInfo,
-			    .pColorBlendState    = &blendInfo,
-			    .pDynamicState       = &dynamicStateInfo,
-			    .layout              = gHelloTrianglePipelineLayout,
-			    .renderPass          = VK_NULL_HANDLE
-			};
-
-			gHelloTrianglePipeline = AssertVk(
-			    Graphics::gVkDevice.createGraphicsPipeline(nullptr, pipelineInfo, Graphics::gAllocationCallbacks)
-			);
 
 			// This has to equal the bindings on the shader side.
 			std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
@@ -590,8 +562,25 @@ namespace Renderer
 			gModelTestPipelineLayout =
 			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
 
-			shaderStages = {
+			std::array shaderStages = {
 			    ::CreateShaderStageInfo(AssetKeyShaderFSModelTest), ::CreateShaderStageInfo(AssetKeyShaderVSModelTest)
+			};
+
+			// Bring it all together to create the actual pipeline object.
+			vk::GraphicsPipelineCreateInfo pipelineInfo = {
+			    .pNext               = &renderInfo,
+			    .stageCount          = shaderStages.size(),
+			    .pStages             = shaderStages.data(),
+			    .pVertexInputState   = &vertInputInfo,
+			    .pInputAssemblyState = &inputAssemblyInfo,
+			    .pViewportState      = &viewportInfo,
+			    .pRasterizationState = &rasterInfo,
+			    .pMultisampleState   = &multiSampleInfo,
+			    .pDepthStencilState  = &depthStencilInfo,
+			    .pColorBlendState    = &blendInfo,
+			    .pDynamicState       = &dynamicStateInfo,
+			    .layout              = gModelTestPipelineLayout,
+			    .renderPass          = VK_NULL_HANDLE
 			};
 
 			// Keep all other pipeline defaults but these.
@@ -648,9 +637,6 @@ namespace Renderer
 		DestroyBindlessResources(gBindlessResources);
 
 		// Destroy all other GPU resources.
-		Graphics::gVkDevice.destroy(gHelloTrianglePipeline, Graphics::gAllocationCallbacks);
-		Graphics::gVkDevice.destroy(gHelloTrianglePipelineLayout, Graphics::gAllocationCallbacks);
-
 		Graphics::gVkDevice.destroy(gModelTestPipeline, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gModelTestPipelineLayout, Graphics::gAllocationCallbacks);
 		Graphics::gVkDevice.destroy(gPerFrameDescLayout, Graphics::gAllocationCallbacks);

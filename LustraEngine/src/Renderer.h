@@ -76,9 +76,6 @@ namespace Renderer
 	// Initialized at startup and has the same lifetime of the renderer itself.
 	inline vk::DescriptorPool gStaticDescriptorPool;
 
-	inline vk::PipelineLayout gHelloTrianglePipelineLayout;
-	inline vk::Pipeline gHelloTrianglePipeline;
-
 	inline vk::PipelineLayout gModelTestPipelineLayout;
 	inline vk::Pipeline gModelTestPipeline;
 	inline vk::DescriptorSetLayout gPerFrameDescLayout;

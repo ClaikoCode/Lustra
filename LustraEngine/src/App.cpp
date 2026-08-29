@@ -132,6 +132,7 @@ bool App::RunApp()
 				m_window.UpdateScaling();
 
 				mainCam.SetAspect(width, height);
+				mainCam.Update();
 			}
 		}
 

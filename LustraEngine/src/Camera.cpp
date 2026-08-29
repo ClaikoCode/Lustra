@@ -6,6 +6,11 @@
 
 void Camera::SetAspect(uint32_t screenWidth, uint32_t screenHeight)
 {
+	if (screenWidth == 0 || screenHeight == 0)
+	{
+		return;
+	}
+
 	aspect = static_cast<float>(screenWidth) / static_cast<float>(screenHeight);
 }
 

@@ -16,7 +16,7 @@ namespace Lustra::UI
 		void* panelData               = nullptr;
 	};
 
-	void Initialize(void* window);
+	void Initialize(SDL_Window* windowPtr);
 
 	void ProcessEvent(SDL_Event* event);
 

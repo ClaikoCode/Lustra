@@ -16,7 +16,7 @@ namespace
 
 namespace Lustra::UI
 {
-	void Initialize(void* window)
+	void Initialize(SDL_Window* windowPtr)
 	{
 		// Setup ImGui context
 		{
@@ -58,7 +58,7 @@ namespace Lustra::UI
 
 		imguiInitInfo.PipelineInfoMain.PipelineRenderingCreateInfo = renderCreateInfo;
 
-		ImGui_ImplSDL3_InitForVulkan(reinterpret_cast<SDL_Window*>(window));
+		ImGui_ImplSDL3_InitForVulkan(windowPtr);
 		ImGui_ImplVulkan_Init(&imguiInitInfo);
 	}
 

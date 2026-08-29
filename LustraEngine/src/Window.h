@@ -1,5 +1,7 @@
 #pragma once
 
+#include "SDL3/SDL_video.h" // For SDL_Window
+
 #include <cstdint>
 
 class Window
@@ -18,15 +20,15 @@ class Window
 	void InitWindow(const char* name, uint32_t width, uint32_t height);
 	void DestroyWindow();
 
-	// Gets a NON CONST void* to the window.
+	// Gets a NON CONST ptr to the window.
 	// This is allowed to use as const as there might be window-related function calls that expect non const pointers
 	// even though they do not expect to change any data.
-	void* GetWindow() const;
+	SDL_Window* GetWindowPtr() const;
 
 	void GetExtentInPixels(uint32_t& width, uint32_t& height) const;
 	void UpdateScaling();
 
-	void WarpMouseToMiddle();
+	void WarpMouseToMiddle() const;
 
 	// === PUBLIC VARS ===
 
@@ -35,5 +37,5 @@ class Window
 	float scalingY = 1.0f;
 
   private:
-	void* m_windowPtr = nullptr;
+	SDL_Window* m_windowPtr = nullptr;
 };

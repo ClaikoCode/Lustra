@@ -38,7 +38,7 @@ App::~App()
 bool App::RunApp()
 {
 	Graphics::SetupVulkan(m_name, m_window);
-	Lustra::UI::Initialize(m_window.GetWindow());
+	Lustra::UI::Initialize(m_window.GetWindowPtr());
 	AssetManager::Setup();
 	Renderer::Setup();
 
@@ -99,7 +99,7 @@ bool App::RunApp()
 
 				if (event.key.key == SDLK_R)
 				{
-					SDL_Window* windowPtr = reinterpret_cast<SDL_Window*>(m_window.GetWindow());
+					SDL_Window* windowPtr = m_window.GetWindowPtr();
 
 					bool currentMode = SDL_GetWindowRelativeMouseMode(windowPtr);
 
@@ -154,7 +154,7 @@ bool App::RunApp()
 		std::vector<Renderer::ModelInstance> modelInstances = {};
 		{
 			// Update camera only when relative mode is on.
-			if (SDL_GetWindowRelativeMouseMode(reinterpret_cast<SDL_Window*>(m_window.GetWindow())))
+			if (SDL_GetWindowRelativeMouseMode(m_window.GetWindowPtr()))
 			{
 				fpsCam.Update(deltaT);
 

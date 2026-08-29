@@ -37,7 +37,7 @@ void Window::DestroyWindow()
 {
 	if (m_windowPtr != nullptr)
 	{
-		auto* windowPtr        = static_cast<SDL_Window*>(m_windowPtr);
+		SDL_Window* windowPtr  = GetWindowPtr();
 		std::string windowName = SDL_GetWindowTitle(windowPtr);
 
 		SDL_DestroyWindow(windowPtr);
@@ -47,7 +47,7 @@ void Window::DestroyWindow()
 	}
 }
 
-void* Window::GetWindow() const
+SDL_Window* Window::GetWindowPtr() const
 {
 	return m_windowPtr;
 }
@@ -56,10 +56,7 @@ void Window::GetExtentInPixels(uint32_t& width, uint32_t& height) const
 {
 	int w;
 	int h;
-	ASSERT_SDL(
-	    SDL_GetWindowSizeInPixels(reinterpret_cast<SDL_Window*>(m_windowPtr), &w, &h),
-	    "Cant fetch SDL window size in pixels"
-	);
+	ASSERT_SDL(SDL_GetWindowSizeInPixels(GetWindowPtr(), &w, &h), "Cant fetch SDL window size in pixels");
 
 	width  = static_cast<uint32_t>(w);
 	height = static_cast<uint32_t>(h);
@@ -67,12 +64,10 @@ void Window::GetExtentInPixels(uint32_t& width, uint32_t& height) const
 
 void Window::UpdateScaling()
 {
-	SDL_Window* sdlWindow = reinterpret_cast<SDL_Window*>(m_windowPtr);
-
 	int windowSizeX;
 	int windowSizeY;
 
-	ASSERT_SDL(SDL_GetWindowSize(sdlWindow, &windowSizeX, &windowSizeY), "Cant fetch SDL window size.");
+	ASSERT_SDL(SDL_GetWindowSize(GetWindowPtr(), &windowSizeX, &windowSizeY), "Cant fetch SDL window size.");
 
 	uint32_t pixelWidth;
 	uint32_t pixelHeight;
@@ -82,9 +77,9 @@ void Window::UpdateScaling()
 	scalingY = static_cast<float>(pixelHeight) / static_cast<float>(windowSizeY);
 }
 
-void Window::WarpMouseToMiddle()
+void Window::WarpMouseToMiddle() const
 {
-	SDL_Window* sdlWindow = reinterpret_cast<SDL_Window*>(m_windowPtr);
+	SDL_Window* sdlWindow = GetWindowPtr();
 
 	int windowSizeX;
 	int windowSizeY;

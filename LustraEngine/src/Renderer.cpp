@@ -838,7 +838,7 @@ namespace Renderer
 		return renderContex;
 	}
 
-	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances)
+	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances, Camera& cam)
 	{
 		FrameResources& frameResources = gFramesInFlight[context.frameResourceIndex];
 
@@ -869,35 +869,10 @@ namespace Renderer
 		{
 			FrameConstants fc = {};
 
-			// TODO: Move to an earlier step.
-			static const auto startTime = std::chrono::steady_clock::now();
-			const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
+			fc.view = cam.view;
+			fc.proj = cam.proj;
 
-			const float angle  = t * glm::radians(45.0f); // 45 deg/sec orbit
-			const float radius = 10.0f;                   // distance from the model
-
-			// A camera sitting back on + Z, looking at the origin.
-			const glm::vec3 eye = {
-			    radius * std::sin(angle),
-			    5.0f,
-			    radius * std::cos(angle),
-			};
-			const glm::vec3 center = {0.0f, 0.0f, 0.0f};
-			const glm::vec3 up     = {0.0f, 1.0f, 0.0f};
-			fc.view                = glm::lookAt(eye, center, up);
-
-			const float aspect =
-			    static_cast<float>(Graphics::gSwapchain.width) / static_cast<float>(Graphics::gSwapchain.height);
-			fc.proj = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 100.0f);
-
-			// Reverse Y since GLM assumes OpenGL standard which has NDC +Y as up when Vulkan assumes +Y as down.
-			fc.proj[1][1] *= -1.0f;
-
-			// Copy over the data.
-			memcpy(frameResources.frameConstantsBuffer.info.pMappedData, &fc, sizeof(fc));
-
-			// Flush
-			vmaFlushAllocation(Graphics::gVmaAllocator, frameResources.frameConstantsBuffer.alloc, 0, VK_WHOLE_SIZE);
+			UploadData(&fc, sizeof(FrameConstants), frameResources.frameConstantsBuffer);
 		}
 	}
 

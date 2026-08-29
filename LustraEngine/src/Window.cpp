@@ -82,6 +82,19 @@ void Window::UpdateScaling()
 	scalingY = static_cast<float>(pixelHeight) / static_cast<float>(windowSizeY);
 }
 
+void Window::WarpMouseToMiddle()
+{
+	SDL_Window* sdlWindow = reinterpret_cast<SDL_Window*>(m_windowPtr);
+
+	int windowSizeX;
+	int windowSizeY;
+
+	ASSERT_SDL(SDL_GetWindowSize(sdlWindow, &windowSizeX, &windowSizeY), "Cant fetch SDL window size.");
+
+	// Guaranteed to not create a move event when in relative mode (unless compiled with special flag).
+	SDL_WarpMouseInWindow(sdlWindow, static_cast<float>(windowSizeX) / 2.0f, static_cast<float>(windowSizeY) / 2.0f);
+}
+
 Window::~Window()
 {
 	DestroyWindow();

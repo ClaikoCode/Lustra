@@ -45,16 +45,44 @@ bool App::RunApp()
 	// TODO: Move to some Game::Init()
 	Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
 
+	Camera mainCam   = {};
+	FPSCamera fpsCam = {};
+
+	// Init camera
+	{
+		uint32_t width;
+		uint32_t height;
+		m_window.GetExtentInPixels(width, height);
+
+		mainCam.SetAspect(width, height);
+
+		mainCam.position = {0.0f, 0.0f, 5.0f};
+		mainCam.ForceLookAt(glm::vec3(0.0f));
+
+		mainCam.Update();
+
+		fpsCam.cam = &mainCam;
+	}
+
 	bool shouldQuit  = false;
 	bool isMinimized = false;
 	while (!shouldQuit)
 	{
-		float mouseDeltaX = 0.0f;
-		float mouseDeltaY = 0.0f;
+		static float t          = 0.0f;
+		static auto currentTime = std::chrono::steady_clock::now();
+
+		const auto oldtime = currentTime; // Save old time before updating.
+		currentTime        = std::chrono::steady_clock::now();
+
+		const float deltaT = std::chrono::duration<float>(currentTime - oldtime).count();
+		t += deltaT;
+		UNUSED_VAR(t);
 
 		SDL_Event event = {};
 		while (SDL_PollEvent(&event))
 		{
+			Lustra::UI::ProcessEvent(&event);
+
 			if (event.type == SDL_EVENT_QUIT)
 			{
 				shouldQuit = true;
@@ -63,8 +91,6 @@ bool App::RunApp()
 
 			if (event.type == SDL_EVENT_KEY_DOWN)
 			{
-				PRINT_LOG("Key {} was pressed!", SDL_GetKeyName(event.key.key));
-
 				if (event.key.key == SDLK_ESCAPE)
 				{
 					shouldQuit = true;
@@ -78,20 +104,10 @@ bool App::RunApp()
 					bool currentMode = SDL_GetWindowRelativeMouseMode(windowPtr);
 
 					SDL_SetWindowRelativeMouseMode(windowPtr, !currentMode);
-				}
-			}
 
-			if (event.type == SDL_EVENT_MOUSE_MOTION)
-			{
-				if (!SDL_GetWindowRelativeMouseMode(reinterpret_cast<SDL_Window*>(m_window.GetWindow())))
-				{
-					float x;
-					float y;
-					SDL_GetMouseState(&x, &y);
-				}
-				else
-				{
-					SDL_GetRelativeMouseState(&mouseDeltaX, &mouseDeltaY);
+					// Flushes any pending mouse motion for the window.
+					// This allows the delta to be zeroed when first reading.
+					SDL_GetRelativeMouseState(nullptr, nullptr);
 				}
 			}
 
@@ -114,6 +130,8 @@ bool App::RunApp()
 				}
 
 				m_window.UpdateScaling();
+
+				mainCam.SetAspect(width, height);
 			}
 		}
 
@@ -130,12 +148,21 @@ bool App::RunApp()
 		// === START OF GAME AND RENDER LOOP ===
 
 		// Start UI frame.
-		Lustra::UI::ProcessEvent(&event);
 		Lustra::UI::NewFrame();
 
 		// TODO: Move to some Game::Update() function.
 		std::vector<Renderer::ModelInstance> modelInstances = {};
 		{
+			// Update camera only when relative mode is on.
+			if (SDL_GetWindowRelativeMouseMode(reinterpret_cast<SDL_Window*>(m_window.GetWindow())))
+			{
+				fpsCam.Update(deltaT);
+
+				// Forces mouse to be at center of screen without creating mouse movement event (in relative
+				// mode).
+				m_window.WarpMouseToMiddle();
+			}
+
 			modelInstances.push_back({
 			    .modelHandle = modelTest,
 			    .worldMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(15.0f)),
@@ -151,9 +178,10 @@ bool App::RunApp()
 			continue;
 		}
 
-		// Record rendering commands.
+		// Update buffers and record rendering commands.
 		{
-			Renderer::Update(context, modelInstances);
+			ENSURE(fpsCam.cam != nullptr);
+			Renderer::Update(context, modelInstances, *fpsCam.cam);
 
 			Renderer::Render(context, modelInstances);
 

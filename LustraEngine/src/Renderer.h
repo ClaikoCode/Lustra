@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Buffer.h"
+#include "Camera.h"
 #include "LustraGLM.h"
 #include "LustraVulkan.h"
 #include "Model.h"
@@ -94,7 +95,7 @@ namespace Renderer
 	[[nodiscard]] RenderContext BeginFrame();
 
 	// Write frame CPU data to GPU buffers.
-	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances);
+	void Update(RenderContext& context, const std::vector<ModelInstance>& modelInstances, Camera& cam);
 
 	// Record commands.
 	void Render(RenderContext& context, const std::vector<ModelInstance>& modelInstances);

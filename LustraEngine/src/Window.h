@@ -26,6 +26,8 @@ class Window
 	void GetExtentInPixels(uint32_t& width, uint32_t& height) const;
 	void UpdateScaling();
 
+	void WarpMouseToMiddle();
+
 	// === PUBLIC VARS ===
 
 	// Has to be updated if window resizes.

@@ -93,8 +93,6 @@ namespace Renderer
 {
 	void CreateBindlessResources(BindlessResources& bindlessResources)
 	{
-		bindlessResources.samplerCache.Initialize();
-
 		bindlessResources.materialStorageBuffer = CreateBuffer(
 		    "Bindless Resources/Materials",
 		    sizeof(Resource::GPUMaterial) * BindlessResources::kMaxMaterials,
@@ -214,8 +212,6 @@ namespace Renderer
 		Graphics::gVkDevice.destroy(bindlessResources.layout, Graphics::gAllocationCallbacks);
 
 		DestroyBuffer(bindlessResources.materialStorageBuffer);
-
-		bindlessResources.samplerCache.Destroy();
 	}
 
 	void UpdateMaterialBuffer(BindlessResources& bindlessResources)
@@ -285,9 +281,8 @@ namespace Renderer
 		const std::vector<Handle<Resource::Sampler2D>> samplerHandles =
 		    Resource::GetAliveHandles<Resource::Sampler2D>();
 
-		Handle<Resource::Sampler2D> fallbackSampler =
-		    bindlessResources.samplerCache.GetDefaultSampler(DefaultSamplerLinearRepeat);
-		vk::DescriptorImageInfo fallback = {.sampler = Resource::GetRef(fallbackSampler).sampler};
+		Handle<Resource::Sampler2D> fallbackSampler = SamplerCache::GetDefaultSampler(DefaultSamplerLinearRepeat);
+		vk::DescriptorImageInfo fallback            = {.sampler = Resource::GetRef(fallbackSampler).sampler};
 
 		std::vector<vk::DescriptorImageInfo> samplerInfos(BindlessResources::kMaxSamplers, fallback);
 		for (auto samplerHandle : samplerHandles)
@@ -316,6 +311,8 @@ namespace Renderer
 {
 	void Setup()
 	{
+		SamplerCache::Initialize();
+
 		CreateBindlessResources(gBindlessResources);
 
 		// Subscribe to swapchain updates.
@@ -635,6 +632,7 @@ namespace Renderer
 		Resource::Release(gSceneDepth);
 
 		DestroyBindlessResources(gBindlessResources);
+		SamplerCache::Destroy();
 
 		// Destroy all other GPU resources.
 		Graphics::gVkDevice.destroy(gModelTestPipeline, Graphics::gAllocationCallbacks);

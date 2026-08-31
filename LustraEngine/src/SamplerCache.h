@@ -19,9 +19,8 @@ enum DefaultSampler : uint8_t
 	DefaultSamplerCount // Keep last.
 };
 
-class SamplerCache
+namespace SamplerCache
 {
-  public:
 	// Fills the sampler cache with default samplers.
 	void Initialize();
 
@@ -31,10 +30,6 @@ class SamplerCache
 
 	Handle<Resource::Sampler2D> GetDefaultSampler(DefaultSampler defaultSampler);
 
-	std::array<Resource::SamplerDesc2D, DefaultSamplerCount> defaultSamplers = {};
+	inline std::array<Resource::SamplerDesc2D, DefaultSamplerCount> gDefaultSamplers = {};
 
-  private:
-	void RegisterSampler(std::string_view name, const Resource::SamplerDesc2D& samplerDesc2D);
-
-	SamplerMap m_samplerMap;
-};
+}; // namespace SamplerCache

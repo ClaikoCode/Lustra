@@ -49,8 +49,6 @@ namespace Renderer
 		vk::DescriptorSetLayout layout;
 		vk::DescriptorPool descriptorPool;
 		vk::DescriptorSet set;
-
-		SamplerCache samplerCache;
 	};
 
 	struct ModelInstance

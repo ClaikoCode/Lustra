@@ -7,6 +7,7 @@
 #include "LustraLib/Utils.h"
 #include "Resource.h"
 #include "Sampler.h"
+#include "SamplerCache.h"
 #include "TextureImporter.h"
 #include "glm/gtc/type_ptr.hpp"
 #include "tinygltf/tiny_gltf_v3.h"
@@ -81,7 +82,7 @@ namespace
 		return std::string_view(tg3Str.data, tg3Str.len);
 	}
 
-	inline glm::mat4 tg3MatToGLMMAt(const double matrix[16])
+	inline glm::mat4 tg3MatToGLMMat(const double matrix[16])
 	{
 		// Explicit converting from a double mat4 to float mat4.
 		return glm::mat4(glm::make_mat4(matrix));
@@ -277,9 +278,17 @@ namespace
 			    .orm      = Resource::AddRef(GetDefaultTexture(Resource::Material::MapType::ORM)),
 			};
 
+			Handle<Resource::Sampler2D> defaultSampler = SamplerCache::GetDefaultSampler(DefaultSamplerLinearRepeat);
+			const Resource::Material::MapSamplers samplers = {
+			    .albedoSampler   = Resource::AddRef(defaultSampler),
+			    .normalSampler   = Resource::AddRef(defaultSampler),
+			    .emissiveSampler = Resource::AddRef(defaultSampler),
+			    .ormSampler      = Resource::AddRef(defaultSampler),
+			};
+
 			const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
 
-			Resource::CreateMaterial("Default Material", matHandle, props, maps);
+			Resource::CreateMaterial("Default Material", matHandle, props, maps, samplers);
 
 			defaultMaterial = matHandle;
 		}
@@ -588,8 +597,6 @@ std::optional<TextureArtifact> ResolveTextureArtifact(
 
 tg3_sampler GetSampler(int32_t texIndex, const tg3_model& tg3Model)
 {
-	const tg3_texture& tex = tg3Model.textures[texIndex];
-
 	tg3_sampler sampler = {};
 
 	// Default sampler wrap must be REPEAT according to glTF spec.
@@ -600,9 +607,13 @@ tg3_sampler GetSampler(int32_t texIndex, const tg3_model& tg3Model)
 	sampler.min_filter = -1;
 	sampler.mag_filter = -1;
 
-	if (tex.sampler != -1)
+	if (texIndex != -1 && tg3Model.textures != nullptr)
 	{
-		sampler = tg3Model.samplers[tex.sampler];
+		const tg3_texture& tex = tg3Model.textures[texIndex];
+		if (tex.sampler != -1)
+		{
+			sampler = tg3Model.samplers[tex.sampler];
+		}
 	}
 
 	return sampler;
@@ -641,7 +652,8 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 				break;
 
 			case Resource::Material::MapType::ORM:
-				// TODO: Handle this better as ORM should not be allowed to be sent into this function.
+				// This function should have ORM map sent in as argument for this function. Use GetORMTextureHandle()
+				// instead.
 				CHECK_UNREACHABLE();
 				break;
 		}
@@ -673,10 +685,6 @@ Handle<Resource::Texture2D> GetSimpleTextureHandle(
 				case ComponentType::Unknown:
 					CHECK_UNREACHABLE();
 			}
-
-			const tg3_sampler sampler = GetSampler(texIndex, statics.tg3Model);
-			auto samplerDesc          = tg3SamplerToSamplerDesc(sampler);
-			UNUSED_VAR(samplerDesc); // TODO: Put sampler instantiation in the correct place of model importing.
 
 			Resource::TextureDesc2D texDesc = {
 			    .width     = texArtifact.dims.width,
@@ -907,6 +915,11 @@ Handle<Resource::Texture2D> GetORMTextureHandle(
 	return statics.texCache.at(ormTexKey);
 }
 
+Handle<Resource::Sampler2D> GetSamplerHandle(int32_t texIndex, const tg3_model& tg3Model)
+{
+	return SamplerCache::GetOrCreateSampler2D(tg3SamplerToSamplerDesc(GetSampler(texIndex, tg3Model)));
+}
+
 Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStatics& statics)
 {
 	if (matIndex == -1)
@@ -940,6 +953,16 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		    .orm = Resource::AddRef(GetORMTextureHandle(matName, occlusionTexIndex, metalRoughTexIndex, statics)),
 		};
 
+		const Resource::Material::MapSamplers samplers = {
+		    .albedoSampler   = Resource::AddRef(GetSamplerHandle(albedoTexIndex, statics.tg3Model)),
+		    .normalSampler   = Resource::AddRef(GetSamplerHandle(normalTexIndex, statics.tg3Model)),
+		    .emissiveSampler = Resource::AddRef(GetSamplerHandle(emissiveTexIndex, statics.tg3Model)),
+		    // Lustra choice to force default linear repeat sampling for ORM texture. Assuming PBR materials, this type
+		    // of sampling made the most sense.
+		    // TODO: Find a more explicit way to pick sampler for ORM by checking actual texture properties.
+		    .ormSampler = Resource::AddRef(SamplerCache::GetDefaultSampler(DefaultSamplerLinearRepeat)),
+		};
+
 		const Resource::MaterialProperties props = {
 		    .albedoFactor      = glm::make_vec4(material.pbr_metallic_roughness.base_color_factor),
 		    .emissiveFactor    = glm::make_vec3(material.emissive_factor),
@@ -949,7 +972,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 		};
 
 		const Handle<Resource::Material> matHandle = Resource::AllocateNonOwning<Resource::Material>();
-		Resource::CreateMaterial(matName, matHandle, props, maps);
+		Resource::CreateMaterial(matName, matHandle, props, maps, samplers);
 
 		statics.matCache.emplace(matIndex, matHandle);
 	}
@@ -965,7 +988,7 @@ Handle<Resource::Material> GetMaterialHandle(int32_t matIndex, ProcessModelStati
 	auto localTransform = glm::mat4(1.0f);
 	if (node.has_matrix != 0)
 	{
-		localTransform = parentTransform * tg3MatToGLMMAt(node.matrix);
+		localTransform = parentTransform * tg3MatToGLMMat(node.matrix);
 	}
 	else
 	{

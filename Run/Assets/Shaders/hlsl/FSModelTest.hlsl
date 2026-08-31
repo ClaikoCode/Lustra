@@ -14,11 +14,17 @@ struct Material
 	float roughnessFactor;
 	float _padding;
 
-	// Bindless indices
+	// Bindless texture indices
 	uint albedoIndex;
 	uint normalIndex;
 	uint emissiveIndex;
 	uint ormIndex;
+
+	// Bindless sampler indices
+	uint albedoSampIndex;
+	uint normalSampIndex;
+	uint emissiveSampIndex;
+	uint ormSampIndex;
 };
 
 struct VSOutput
@@ -31,26 +37,31 @@ struct VSOutput
 
 [[vk::push_constant]] Push pc;
 [[vk::binding(0, 0)]] StructuredBuffer<Material> mats;
-[[vk::binding(1, 0)]] SamplerState samp;
+[[vk::binding(1, 0)]] SamplerState samplers[];
 [[vk::binding(2, 0)]] Texture2D textures[];
 
 float4 main(VSOutput input) : SV_Target
 {
 	Material mat = mats[pc.materialIndex];
 
+	SamplerState albedoSampler   = samplers[mat.albedoSampIndex];
+	SamplerState normalSampler   = samplers[mat.normalSampIndex];
+	SamplerState emissiveSampler = samplers[mat.emissiveSampIndex];
+	SamplerState ormSampler      = samplers[mat.ormSampIndex];
+
 	uint albedoIndex   = mat.albedoIndex;
-	float4 albedoColor = textures[albedoIndex].Sample(samp, input.uv);
+	float4 albedoColor = textures[albedoIndex].Sample(albedoSampler, input.uv);
 	albedoColor        = albedoColor * mat.albedoFactor;
 
 	uint normalIndex   = mat.normalIndex;
-	float3 normalValue = textures[normalIndex].Sample(samp, input.uv).rgb;
+	float3 normalValue = textures[normalIndex].Sample(normalSampler, input.uv).rgb;
 
-	float4 ormValues = textures[mat.ormIndex].Sample(samp, input.uv);
+	float3 ormValues = textures[mat.ormIndex].Sample(ormSampler, input.uv).rgb;
 	float ao         = ormValues.r;
 	float roughness  = ormValues.g;
 	float metallic   = ormValues.b;
 
-	float3 emissive = textures[mat.emissiveIndex].Sample(samp, input.uv).rgb;
+	float3 emissive = textures[mat.emissiveIndex].Sample(emissiveSampler, input.uv).rgb;
 	emissive        = emissive * mat.emissiveFactor;
 
 	return float4(albedoColor.rgb + emissive, albedoColor.a);

@@ -593,7 +593,7 @@ namespace Graphics
 
 	void SetupSurface(const Window& window)
 	{
-		auto* sdlWindow         = static_cast<SDL_Window*>(window.GetWindowPtr());
+		SDL_Window* sdlWindow   = window.GetWindowPtr();
 		VkSurfaceKHR rawSurface = VK_NULL_HANDLE;
 		ASSERT_SDL(
 		    SDL_Vulkan_CreateSurface(

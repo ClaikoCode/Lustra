@@ -7,3 +7,7 @@ This is a document that contains a list of tasks that I can get to when I have t
 ### Bake sampler indices into a single data field on the GPU side
 
 Currently, there are 5 uints stored, one for each type of sampler index that is used for the different material maps. However, there will most likely never be a time where I will have over 255 unique samplers, which means that they all could fit into at least two 32 bit uints instead.
+
+### Add interface in DirectoryWatcher to handle new files and deleted files.
+
+Directory watcher blindly adds and removes new files without reporting to the user what has changed. Newly added files get added to updated files but some systems might not desire that functionality and instead want to have the information to act accordingly.

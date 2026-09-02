@@ -3,6 +3,7 @@
 # -readability-use-concise-preprocessor-directives : defined() is not hard to write
 # -modernize-return-braced-init-list : Explicit constructor returns are more clear IMO
 # -modernize-use-auto : I think for simple types its easier to read without auto on LHS.
+# -modernize-pass-by-value : Const references are clearer and have no side effects if the same object is the argument for two object constructions.
 
 Checks: |
   bugprone-*,
@@ -18,6 +19,7 @@ Checks: |
   -modernize-use-nodiscard,
   -modernize-return-braced-init-list,
   -modernize-use-auto,
+  -modernize-pass-by-value,
 
   readability-*,
   -readability-magic-numbers,

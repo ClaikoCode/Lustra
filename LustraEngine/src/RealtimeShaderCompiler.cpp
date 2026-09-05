@@ -62,47 +62,46 @@ namespace RealtimeShaderCompiler
 		shaderMap[Resource::GetRef(shaderHandle).compInfo.shaderPath] = shaderHandle;
 	}
 
-	void RecompileShader(const std::filesystem::path& shaderPath)
-	{
-		ENSURE_EX(includeMap.contains(shaderPath) == false, "Cannot recompile a shader thats included in other files.");
-
-		Handle<Resource::Shader> shaderHandle = shaderMap.at(shaderPath);
-
-		Resource::Shader& shader = Resource::GetRef(shaderHandle);
-		bool success             = ShaderCompilation::CompileShader(shader.compInfo, {}, shader.artifact);
-
-		if (!success)
-		{
-			PRINT_ERROR("Recompilation failed. Aborting. Shader module unchanged.");
-			return;
-		}
-
-		Graphics::gVkDevice.destroyShaderModule(shader.module, Graphics::gAllocationCallbacks);
-
-		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
-		    .codeSize = shader.artifact.spirvData.size(),
-		    .pCode    = reinterpret_cast<const uint32_t*>(shader.artifact.spirvData.data()),
-		};
-
-		shader.module =
-		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
-	}
-
-	void RecompileShaders(const std::unordered_set<std::filesystem::path>& sourcePaths)
-	{
-		for (const auto& path : sourcePaths)
-		{
-			RecompileShader(path);
-		}
-	}
-
 	void RecompileShadersAndUpdatePipelineObjects(const std::unordered_set<std::filesystem::path>& paths)
 	{
 		PRINT_DEBUG("Recompiling all shaders and calling pipeline object creation callbacks.");
 
 		const std::unordered_set<std::filesystem::path> uniqueSourcePaths = ::GetUniqueSourcePaths(paths);
 
-		RecompileShaders(uniqueSourcePaths);
+		uint32_t failedRecompiles = 0u;
+		for (const auto& path : uniqueSourcePaths)
+		{
+			Handle<Resource::Shader> shaderHandle = shaderMap.at(path);
+
+			Resource::Shader& shader = Resource::GetRef(shaderHandle);
+			bool success             = ShaderCompilation::CompileShader(shader.compInfo, {}, shader.artifact);
+
+			if (!success)
+			{
+				failedRecompiles++;
+				continue;
+			}
+
+			Graphics::gVkDevice.destroyShaderModule(shader.module, Graphics::gAllocationCallbacks);
+
+			const vk::ShaderModuleCreateInfo shaderModuleInfo = {
+			    .codeSize = shader.artifact.spirvData.size(),
+			    .pCode    = reinterpret_cast<const uint32_t*>(shader.artifact.spirvData.data()),
+			};
+
+			shader.module =
+			    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
+		}
+
+		if (failedRecompiles > 0u)
+		{
+			PRINT_ERROR(
+			    "{} {} failed to re-compile. Skipping re-creation of pipeline objects.",
+			    failedRecompiles,
+			    failedRecompiles == 1 ? "shader" : "shaders"
+			);
+			return;
+		}
 
 		std::unordered_set<PipelineCreationCallback> uniqueCallbacks;
 

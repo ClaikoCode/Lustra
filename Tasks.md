@@ -11,3 +11,11 @@ Currently, there are 5 uints stored, one for each type of sampler index that is 
 ### Add interface in DirectoryWatcher to handle new files and deleted files.
 
 Directory watcher blindly adds and removes new files without reporting to the user what has changed. Newly added files get added to updated files but some systems might not desire that functionality and instead want to have the information to act accordingly.
+
+### Try out more spaced out log prints
+
+Something like:
+std::print(outputFile, "[{}] ({} -> {}:{})\n{}\n\n", outputLevelString, funcName, fileName, line, formattedMessage);
+
+This would allow for easier formatting in some cases but might be harder in others. For example, all iterative outputs should instead be formatted first because it is hard to read when they are not consecutive anymore with the additional spacing.
+

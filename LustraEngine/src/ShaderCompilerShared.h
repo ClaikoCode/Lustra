@@ -69,14 +69,15 @@ static inline std::string ShaderTypeToString(ShaderType shaderType)
 
 struct ShaderCompilationInfo
 {
-	std::string entryPoint = "main";
-
-	ShaderType shaderType            = ShaderTypeUnknown;
-	ShaderModel shaderModel          = ShaderModelLatest;
+	std::string entryPoint           = "main";
 	std::filesystem::path shaderPath = {};
 
 	// Holds macro defines inserted into the shader.
 	std::vector<std::string> defines = {};
+
+	ShaderCompiler compiler = ShaderCompiler::Unknown;
+	ShaderType shaderType   = ShaderTypeUnknown;
+	ShaderModel shaderModel = ShaderModelLatest;
 };
 
 struct ShaderArtifact
@@ -86,3 +87,14 @@ struct ShaderArtifact
 	// Files that are included in the shader. Is overwritten every compilation.
 	std::unordered_set<std::string> includeFiles;
 };
+
+namespace ShaderCompilation
+{
+	// Returns if shader successfully compiled.
+	// Artifact is only modified if compilation succeeded.
+	[[nodiscard]] bool CompileShader(
+	    const ShaderCompilationInfo& compInfo,
+	    const std::vector<std::string>& includeDirectories,
+	    ShaderArtifact& outArtifact
+	);
+} // namespace ShaderCompilation

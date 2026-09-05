@@ -4,6 +4,7 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "Resource.h"
+#include "Shader.h"
 #include "ShaderCompilerShared.h"
 
 #include <unordered_map>
@@ -22,32 +23,47 @@ namespace
 
 	IncludeMap includeMap;
 
-	// Will take the input paths (can be both include and source files) and ensure that the output is only source paths.
-	std::unordered_set<std::filesystem::path> GetUniqueSourcePaths(
+	// Will take the input paths (can be both include and source files) and ensure that the output is only valid source
+	// paths.
+	std::unordered_set<std::filesystem::path> GetValidSourcePaths(
 	    const std::unordered_set<std::filesystem::path>& paths
 	)
 	{
-		std::unordered_set<std::filesystem::path> uniquePaths;
+		std::unordered_set<std::filesystem::path> validPaths;
 
+		// Fill with only source files.
 		for (const auto& path : paths)
 		{
 			if (includeMap.contains(path))
 			{
-				uniquePaths.insert_range(includeMap.at(path));
+				validPaths.insert_range(includeMap.at(path));
 			}
 			else
 			{
-				uniquePaths.insert(path);
+				validPaths.insert(path);
 			}
 		}
 
-		return uniquePaths;
+		// Remove all source files that have not been registered.
+		std::erase_if(
+		    validPaths,
+		    [](const std::filesystem::path& path)
+		{
+			if (!shaderMap.contains(path))
+			{
+				PRINT_DEBUG(
+				    "'{}' is not a registered shader source and wont be attempted for compilation.", path.string()
+				);
+				return true;
+			}
+
+			return false;
+		}
+		);
+
+		return validPaths;
 	}
 
-} // namespace
-
-namespace RealtimeShaderCompiler
-{
 	void RegisterShader(Handle<Resource::Shader> shaderHandle)
 	{
 		Resource::Shader shader                     = Resource::GetRef(shaderHandle);
@@ -61,15 +77,18 @@ namespace RealtimeShaderCompiler
 
 		shaderMap[Resource::GetRef(shaderHandle).compInfo.shaderPath] = shaderHandle;
 	}
+} // namespace
 
+namespace RealtimeShaderCompiler
+{
 	void RecompileShadersAndUpdatePipelineObjects(const std::unordered_set<std::filesystem::path>& paths)
 	{
 		PRINT_DEBUG("Recompiling all shaders and calling pipeline object creation callbacks.");
 
-		const std::unordered_set<std::filesystem::path> uniqueSourcePaths = ::GetUniqueSourcePaths(paths);
+		std::unordered_set<std::filesystem::path> validSourcePaths = ::GetValidSourcePaths(paths);
 
 		uint32_t failedRecompiles = 0u;
-		for (const auto& path : uniqueSourcePaths)
+		for (const auto& path : validSourcePaths)
 		{
 			Handle<Resource::Shader> shaderHandle = shaderMap.at(path);
 
@@ -96,16 +115,17 @@ namespace RealtimeShaderCompiler
 		if (failedRecompiles > 0u)
 		{
 			PRINT_ERROR(
-			    "{} {} failed to re-compile. Skipping re-creation of pipeline objects.",
+			    "{} shader{} failed to re-compile. Skipping re-creation of pipeline objects.",
 			    failedRecompiles,
-			    failedRecompiles == 1 ? "shader" : "shaders"
+			    failedRecompiles > 1u ? "s" : ""
 			);
+
 			return;
 		}
 
 		std::unordered_set<PipelineCreationCallback> uniqueCallbacks;
 
-		for (const auto& path : uniqueSourcePaths)
+		for (const auto& path : validSourcePaths)
 		{
 			const std::vector<PipelineCreationCallback>& callbacks = pipelineMap.at(path);
 			uniqueCallbacks.insert_range(callbacks);
@@ -122,6 +142,8 @@ namespace RealtimeShaderCompiler
 
 	void RegisterPipelineWithShaders(PipelineCreationCallback callback, const std::vector<AssetID>& shaderAssets)
 	{
+		ENSURE(callback != nullptr);
+
 		for (AssetID assetID : shaderAssets)
 		{
 			const AssetEntry& assetEntry = AssetManager::GetEntry(assetID);
@@ -133,7 +155,7 @@ namespace RealtimeShaderCompiler
 
 			Handle<Resource::Shader> shaderHandle = shaderRegistry.at(assetID);
 
-			RegisterShader(shaderHandle);
+			::RegisterShader(shaderHandle);
 
 			const Resource::Shader& shader = Resource::GetRef(shaderHandle);
 

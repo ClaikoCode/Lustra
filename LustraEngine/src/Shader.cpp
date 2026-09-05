@@ -21,14 +21,10 @@ namespace Resource
 
 		shader->name = name;
 
-		bool compSuccessful = ShaderCompilation::CompileShader(compInfo, includeDirs, shader->artifact);
-
-		if (!compSuccessful)
-		{
-			PRINT_ERROR("Shader compilation failed without any SPIRV to fall back on.");
-			CHECK_NOT_IMPL(); // TODO: Find if there is any way to have a "fallback shader".
-			return;
-		}
+		ENSURE_EX(
+		    ShaderCompilation::CompileShader(compInfo, includeDirs, shader->artifact),
+		    "Cannot create new shader with invalid source code."
+		);
 
 		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
 		    .codeSize = shader->artifact.spirvData.size(),

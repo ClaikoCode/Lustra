@@ -93,12 +93,44 @@ namespace RealtimeShaderCompiler
 			Handle<Resource::Shader> shaderHandle = shaderMap.at(path);
 
 			Resource::Shader& shader = Resource::GetRef(shaderHandle);
-			bool success             = ShaderCompilation::CompileShader(shader.compInfo, {}, shader.artifact);
+
+			const std::unordered_set<std::string> oldIncludes = shader.artifact.includeFiles;
+
+			bool success = ShaderCompilation::CompileShader(shader.compInfo, {}, shader.artifact);
 
 			if (!success)
 			{
 				failedRecompiles++;
 				continue;
+			}
+
+			const std::unordered_set<std::string>& newIncludes = shader.artifact.includeFiles;
+
+			// Update includes if changed after compilation.
+			if (oldIncludes != newIncludes)
+			{
+				for (const auto& oldInclude : oldIncludes)
+				{
+					auto includeIt = includeMap.find(oldInclude);
+					if (includeIt == includeMap.end())
+					{
+						// This should never happen because if it existed as an old include at registration time then it
+						// must be present in the include map. If this does happen, there is a bug somewhere.
+						CHECK_UNREACHABLE();
+						continue;
+					}
+
+					includeIt->second.erase(path);
+					if (includeIt->second.empty())
+					{
+						includeMap.erase(oldInclude);
+					}
+				}
+
+				for (const auto& newInclude : newIncludes)
+				{
+					includeMap[newInclude].insert(path);
+				}
 			}
 
 			Graphics::gVkDevice.destroyShaderModule(shader.module, Graphics::gAllocationCallbacks);

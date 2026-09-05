@@ -41,10 +41,11 @@ namespace Resource
 
 	void DestroyShader(Handle<Shader> shaderHandle)
 	{
-		const Shader* shaderPtr = Get(shaderHandle);
+		Shader* shaderPtr = Get(shaderHandle);
 
 		ENSURE(shaderPtr != nullptr);
 
 		Graphics::gVkDevice.destroyShaderModule(shaderPtr->module);
+		shaderPtr->module = VK_NULL_HANDLE;
 	}
 } // namespace Resource

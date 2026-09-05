@@ -7,6 +7,7 @@
 #include "LustraLib/Assert.h"
 #include "Model.h"
 #include "ModelImporter.h"
+#include "RealtimeShaderCompiler.h"
 #include "Sampler.h"
 #include "Shader.h"
 #include "ShaderImporter.h"
@@ -27,11 +28,10 @@ namespace
 {
 	vk::PipelineShaderStageCreateInfo CreateShaderStageInfo(AssetID id)
 	{
-		const auto& shaderMeta         = AssetManager::GetMetadataFromID<Metadata::Shader>(id);
 		const Resource::Shader* shader = Resource::Get(AssetRegistry::Resolve<Resource::Shader>(id));
 
 		vk::ShaderStageFlagBits shaderStage;
-		switch (shaderMeta.shaderType)
+		switch (shader->compInfo.shaderType)
 		{
 			case ShaderTypeVS:
 				shaderStage = vk::ShaderStageFlagBits::eVertex;
@@ -50,7 +50,7 @@ namespace
 		vk::PipelineShaderStageCreateInfo info = {
 		    .stage  = shaderStage,
 		    .module = shader->module,
-		    .pName  = shaderMeta.entryPoint.c_str(), // Safe because shaderMeta lifetime is not in this scope.
+		    .pName  = shader->compInfo.entryPoint.c_str(), // Safe because shaderMeta lifetime is not in this scope.
 		};
 
 		return info;
@@ -87,6 +87,125 @@ namespace
 
 	std::vector<Handle<Resource::Texture2D>> swapchainDependentTextures;
 
+	void CreateModelTestPipeline()
+	{
+		vk::PipelineVertexInputStateCreateInfo vertInputInfo = ::CreateVertexInputStateDefault();
+
+		const vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
+		    .topology = vk::PrimitiveTopology::eTriangleList
+		};
+
+		// Define how depth values should be handled.
+		const vk::PipelineDepthStencilStateCreateInfo depthStencilInfo = {
+		    .depthTestEnable   = vk::True,
+		    .depthWriteEnable  = vk::True,
+		    .depthCompareOp    = vk::CompareOp::eLess,
+		    .stencilTestEnable = vk::False
+		};
+
+		// Viewport will be bound dynamically, so pointers are set to null.
+		const vk::PipelineViewportStateCreateInfo viewportInfo = {
+		    .viewportCount = 1,
+		    .pViewports    = nullptr,
+		    .scissorCount  = 1,
+		    .pScissors     = nullptr,
+		};
+
+		// Describe how the previously defined primitives should be treated.
+		const vk::PipelineRasterizationStateCreateInfo rasterInfo = {
+		    .polygonMode = vk::PolygonMode::eFill,
+		    .cullMode    = vk::CullModeFlagBits::eBack,
+		    .frontFace   = vk::FrontFace::eCounterClockwise,
+		    .lineWidth   = 1.0f,
+		};
+
+		// Multisampling information where a single sample is equivalent to no multi sampling.
+		const vk::PipelineMultisampleStateCreateInfo multiSampleInfo = {
+		    .rasterizationSamples = vk::SampleCountFlagBits::e1
+		};
+
+		// Tell vulkan how color should be written. What should be blended and which channels should be used.
+		const vk::PipelineColorBlendAttachmentState attachState = {
+		    .blendEnable = vk::False, .colorWriteMask = vk::FlagTraits<vk::ColorComponentFlagBits>::allFlags
+		};
+
+		// Tell how blending should occurr when writing.
+		const vk::PipelineColorBlendStateCreateInfo blendInfo = {.attachmentCount = 1, .pAttachments = &attachState};
+
+		// Describe the dynamic binding of viewport and scissor info.
+		const std::array dynamicState = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+		const vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {
+		    .dynamicStateCount = dynamicState.size(), .pDynamicStates = dynamicState.data()
+		};
+
+		// Dynamic render EXT
+		const vk::PipelineRenderingCreateInfo renderInfo = {
+		    .colorAttachmentCount    = 1,
+		    .pColorAttachmentFormats = &Graphics::gTargetSurfaceFormat.format,
+		    .depthAttachmentFormat   = Graphics::gTargetDepthFormat
+		};
+
+		const std::array pcRanges = {
+		    vk::PushConstantRange{
+		        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+		        .offset     = 0,
+		        .size       = sizeof(uint32_t) // transform index
+		    },
+
+		    vk::PushConstantRange{
+		        .stageFlags = vk::ShaderStageFlagBits::eFragment,
+		        .offset     = sizeof(uint32_t),
+		        .size       = sizeof(uint32_t) // material index
+		    },
+		};
+
+		// This order must match the set indices inside shaders layout(set = i).
+		const std::array setLayouts = {Renderer::gBindlessResources.layout, Renderer::gPerFrameDescLayout};
+
+		vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {};
+		pipelineLayoutInfo.setSetLayouts(setLayouts);
+		pipelineLayoutInfo.setPushConstantRanges(pcRanges);
+
+		if (Renderer::gModelTestPipelineLayout)
+		{
+			Graphics::gVkDevice.destroyPipelineLayout(
+			    Renderer::gModelTestPipelineLayout, Graphics::gAllocationCallbacks
+			);
+		}
+
+		Renderer::gModelTestPipelineLayout =
+		    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
+
+		std::array shaderStages = {
+		    ::CreateShaderStageInfo(AssetKeyShaderFSModelTest), ::CreateShaderStageInfo(AssetKeyShaderVSModelTest)
+		};
+
+		// Bring it all together to create the actual pipeline object.
+		vk::GraphicsPipelineCreateInfo pipelineInfo = {
+		    .pNext               = &renderInfo,
+		    .pVertexInputState   = &vertInputInfo,
+		    .pInputAssemblyState = &inputAssemblyInfo,
+		    .pViewportState      = &viewportInfo,
+		    .pRasterizationState = &rasterInfo,
+		    .pMultisampleState   = &multiSampleInfo,
+		    .pDepthStencilState  = &depthStencilInfo,
+		    .pColorBlendState    = &blendInfo,
+		    .pDynamicState       = &dynamicStateInfo,
+		    .renderPass          = VK_NULL_HANDLE
+		};
+
+		// Keep all other pipeline defaults but these.
+		pipelineInfo.setStages(shaderStages);
+		pipelineInfo.setLayout(Renderer::gModelTestPipelineLayout);
+
+		if (Renderer::gModelTestPipeline)
+		{
+			Graphics::gVkDevice.destroyPipeline(Renderer::gModelTestPipeline, Graphics::gAllocationCallbacks);
+		}
+
+		Renderer::gModelTestPipeline =
+		    AssertVk(Graphics::gVkDevice.createGraphicsPipeline(nullptr, pipelineInfo, Graphics::gAllocationCallbacks));
+	}
 } // namespace
 
 namespace Renderer
@@ -396,68 +515,8 @@ namespace Renderer
 			NameVk(Graphics::gVkDevice, gStaticDescriptorPool, "Static Descriptor Pool");
 		}
 
-		// Graphics pipeline
+		// Create per frame desc layout.
 		{
-			vk::PipelineLayoutCreateInfo pipelineLayoutInfo = {.setLayoutCount = 0, .pushConstantRangeCount = 0};
-
-			vk::PipelineVertexInputStateCreateInfo vertInputInfo = ::CreateVertexInputStateDefault();
-
-			const vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo = {
-			    .topology = vk::PrimitiveTopology::eTriangleList
-			};
-
-			// Define how depth values should be handled.
-			const vk::PipelineDepthStencilStateCreateInfo depthStencilInfo = {
-			    .depthTestEnable   = vk::True,
-			    .depthWriteEnable  = vk::True,
-			    .depthCompareOp    = vk::CompareOp::eLess,
-			    .stencilTestEnable = vk::False
-			};
-
-			// Viewport will be bound dynamically, so pointers are set to null.
-			const vk::PipelineViewportStateCreateInfo viewportInfo = {
-			    .viewportCount = 1,
-			    .pViewports    = nullptr,
-			    .scissorCount  = 1,
-			    .pScissors     = nullptr,
-			};
-
-			// Describe how the previously defined primitives should be treated.
-			const vk::PipelineRasterizationStateCreateInfo rasterInfo = {
-			    .polygonMode = vk::PolygonMode::eFill,
-			    .cullMode    = vk::CullModeFlagBits::eBack,
-			    .frontFace   = vk::FrontFace::eCounterClockwise,
-			    .lineWidth   = 1.0f,
-			};
-
-			// Multisampling information where a single sample is equivalent to no multi sampling.
-			const vk::PipelineMultisampleStateCreateInfo multiSampleInfo = {
-			    .rasterizationSamples = vk::SampleCountFlagBits::e1
-			};
-
-			// Tell vulkan how color should be written. What should be blended and which channels should be used.
-			const vk::PipelineColorBlendAttachmentState attachState = {
-			    .blendEnable = vk::False, .colorWriteMask = vk::FlagTraits<vk::ColorComponentFlagBits>::allFlags
-			};
-
-			// Tell how blending should occurr when writing.
-			const vk::PipelineColorBlendStateCreateInfo blendInfo = {
-			    .attachmentCount = 1, .pAttachments = &attachState
-			};
-
-			// Describe the dynamic binding of viewport and scissor info.
-			const std::array dynamicState = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-			const vk::PipelineDynamicStateCreateInfo dynamicStateInfo = {
-			    .dynamicStateCount = dynamicState.size(), .pDynamicStates = dynamicState.data()
-			};
-
-			// Dynamic render EXT
-			const vk::PipelineRenderingCreateInfo renderInfo = {
-			    .colorAttachmentCount    = 1,
-			    .pColorAttachmentFormats = &Graphics::gTargetSurfaceFormat.format,
-			    .depthAttachmentFormat   = Graphics::gTargetDepthFormat
-			};
-
 			// This has to equal the bindings on the shader side.
 			std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
 			    // Frame constants
@@ -483,110 +542,56 @@ namespace Renderer
 			gPerFrameDescLayout = AssertVk(
 			    Graphics::gVkDevice.createDescriptorSetLayout(descSetLayoutInfo, Graphics::gAllocationCallbacks)
 			);
+		}
 
-			// Allocate and write descriptor sets
+		// Allocate and write descriptor sets per frame
+		{
+			std::array<vk::DescriptorSetLayout, gMaxFramesInFlight> layouts = {};
+			layouts.fill(gPerFrameDescLayout); // Same layout for each set to be allocated.
+
+			vk::DescriptorSetAllocateInfo setAllocInfo = {};
+			setAllocInfo.setDescriptorPool(gStaticDescriptorPool);
+			setAllocInfo.setDescriptorSetCount(gMaxFramesInFlight);
+			setAllocInfo.setSetLayouts(layouts);
+
+			std::vector<vk::DescriptorSet> sets = AssertVk(Graphics::gVkDevice.allocateDescriptorSets(setAllocInfo));
+
+			// Bind descriptor sets with buffer descriptors per frame.
+			for (uint32_t i = 0; i < gMaxFramesInFlight; i++)
 			{
-				std::array<vk::DescriptorSetLayout, gMaxFramesInFlight> layouts = {};
-				layouts.fill(gPerFrameDescLayout); // Same layout for each set to be allocated.
+				FrameResources& frame      = gFramesInFlight[i];
+				frame.agnosticConstantsSet = sets[i];
 
-				vk::DescriptorSetAllocateInfo setAllocInfo = {};
-				setAllocInfo.setDescriptorPool(gStaticDescriptorPool);
-				setAllocInfo.setDescriptorSetCount(gMaxFramesInFlight);
-				setAllocInfo.setSetLayouts(layouts);
+				const vk::DescriptorBufferInfo uboInfo = {
+				    .buffer = frame.frameConstantsBuffer.buffer, .offset = 0, .range = sizeof(FrameConstants)
+				};
 
-				std::vector<vk::DescriptorSet> sets =
-				    AssertVk(Graphics::gVkDevice.allocateDescriptorSets(setAllocInfo));
+				const vk::DescriptorBufferInfo ssboInfo = {
+				    .buffer = frame.instanceTransformBuffer.buffer, .offset = 0, .range = vk::WholeSize
+				};
 
-				// Bind descriptor sets with buffer descriptors per frame.
-				for (uint32_t i = 0; i < gMaxFramesInFlight; i++)
-				{
-					FrameResources& frame      = gFramesInFlight[i];
-					frame.agnosticConstantsSet = sets[i];
+				const std::array<vk::WriteDescriptorSet, 2> writes = {
+				    vk::WriteDescriptorSet{
+				        .dstSet          = frame.agnosticConstantsSet,
+				        .dstBinding      = 0,
+				        .dstArrayElement = 0,
+				        .descriptorCount = 1,
+				        .descriptorType  = vk::DescriptorType::eUniformBuffer,
+				        .pBufferInfo     = &uboInfo,
+				    },
 
-					const vk::DescriptorBufferInfo uboInfo = {
-					    .buffer = frame.frameConstantsBuffer.buffer, .offset = 0, .range = sizeof(FrameConstants)
-					};
+				    vk::WriteDescriptorSet{
+				        .dstSet          = frame.agnosticConstantsSet,
+				        .dstBinding      = 1,
+				        .dstArrayElement = 0,
+				        .descriptorCount = 1,
+				        .descriptorType  = vk::DescriptorType::eStorageBuffer,
+				        .pBufferInfo     = &ssboInfo,
+				    },
+				};
 
-					const vk::DescriptorBufferInfo ssboInfo = {
-					    .buffer = frame.instanceTransformBuffer.buffer, .offset = 0, .range = vk::WholeSize
-					};
-
-					const std::array<vk::WriteDescriptorSet, 2> writes = {
-					    vk::WriteDescriptorSet{
-					        .dstSet          = frame.agnosticConstantsSet,
-					        .dstBinding      = 0,
-					        .dstArrayElement = 0,
-					        .descriptorCount = 1,
-					        .descriptorType  = vk::DescriptorType::eUniformBuffer,
-					        .pBufferInfo     = &uboInfo,
-					    },
-
-					    vk::WriteDescriptorSet{
-					        .dstSet          = frame.agnosticConstantsSet,
-					        .dstBinding      = 1,
-					        .dstArrayElement = 0,
-					        .descriptorCount = 1,
-					        .descriptorType  = vk::DescriptorType::eStorageBuffer,
-					        .pBufferInfo     = &ssboInfo,
-					    },
-					};
-
-					Graphics::gVkDevice.updateDescriptorSets(writes, {});
-				}
+				Graphics::gVkDevice.updateDescriptorSets(writes, {});
 			}
-
-			const std::array pcRanges = {
-			    vk::PushConstantRange{
-			        .stageFlags = vk::ShaderStageFlagBits::eVertex,
-			        .offset     = 0,
-			        .size       = sizeof(uint32_t) // transform index
-			    },
-
-			    vk::PushConstantRange{
-			        .stageFlags = vk::ShaderStageFlagBits::eFragment,
-			        .offset     = sizeof(uint32_t),
-			        .size       = sizeof(uint32_t) // material index
-			    },
-			};
-
-			// This order must match the set indices inside shaders layout(set = i).
-			const std::array setLayouts = {gBindlessResources.layout, gPerFrameDescLayout};
-
-			pipelineLayoutInfo = {};
-			pipelineLayoutInfo.setSetLayouts(setLayouts);
-			pipelineLayoutInfo.setPushConstantRanges(pcRanges);
-
-			gModelTestPipelineLayout =
-			    AssertVk(Graphics::gVkDevice.createPipelineLayout(pipelineLayoutInfo, Graphics::gAllocationCallbacks));
-
-			std::array shaderStages = {
-			    ::CreateShaderStageInfo(AssetKeyShaderFSModelTest), ::CreateShaderStageInfo(AssetKeyShaderVSModelTest)
-			};
-
-			// Bring it all together to create the actual pipeline object.
-			vk::GraphicsPipelineCreateInfo pipelineInfo = {
-			    .pNext               = &renderInfo,
-			    .stageCount          = shaderStages.size(),
-			    .pStages             = shaderStages.data(),
-			    .pVertexInputState   = &vertInputInfo,
-			    .pInputAssemblyState = &inputAssemblyInfo,
-			    .pViewportState      = &viewportInfo,
-			    .pRasterizationState = &rasterInfo,
-			    .pMultisampleState   = &multiSampleInfo,
-			    .pDepthStencilState  = &depthStencilInfo,
-			    .pColorBlendState    = &blendInfo,
-			    .pDynamicState       = &dynamicStateInfo,
-			    .layout              = gModelTestPipelineLayout,
-			    .renderPass          = VK_NULL_HANDLE
-			};
-
-			// Keep all other pipeline defaults but these.
-			pipelineInfo.setStages(shaderStages);
-			pipelineInfo.setLayout(gModelTestPipelineLayout);
-
-			gModelTestPipeline = AssertVk(
-			    Graphics::gVkDevice.createGraphicsPipeline(nullptr, pipelineInfo, Graphics::gAllocationCallbacks)
-			);
 		}
 
 		// Sync resources
@@ -620,6 +625,15 @@ namespace Renderer
 				    std::format("Frame Resources/Timeline Semaphore[{}]", count++)
 				);
 			}
+		}
+
+		// Pipeline setup
+		{
+			::CreateModelTestPipeline();
+
+			RealtimeShaderCompiler::RegisterPipelineWithShaders(
+			    ::CreateModelTestPipeline, {AssetKeyShaderFSModelTest, AssetKeyShaderVSModelTest}
+			);
 		}
 
 		PRINT_DEBUG("Renderer successfully set up.");

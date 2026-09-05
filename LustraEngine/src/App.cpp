@@ -3,9 +3,12 @@
 #include "AssetManager.h"
 #include "AssetRegistry.h"
 #include "Graphics.h"
+#include "LustraLib/DirectoryWatcher.h"
 #include "LustraLib/Logger.h"
+#include "LustraPaths.h"
 #include "LustraUI.h"
 #include "ModelImporter.h"
+#include "RealtimeShaderCompiler.h"
 #include "Renderer.h"
 #include "Resource.h"
 #include "SDL3/SDL.h"
@@ -41,6 +44,8 @@ bool App::RunApp()
 	Lustra::UI::Initialize(m_window.GetWindowPtr());
 	AssetManager::Setup();
 	Renderer::Setup();
+
+	DirectoryWatcher shaderDirWatcher(Lustra::Paths::ShaderDir(), 200u, {".hlsl", ".hlsli"});
 
 	// TODO: Move to some Game::Init()
 	Handle<Resource::Model> modelTest = AssetRegistry::Resolve<Resource::Model>(AssetKeyModelTest);
@@ -144,6 +149,16 @@ bool App::RunApp()
 		if (isMinimized)
 		{
 			continue;
+		}
+
+		std::unordered_set<std::filesystem::path> changedFiles;
+		shaderDirWatcher.GetChangedFiles(changedFiles);
+
+		if (!changedFiles.empty())
+		{
+			Graphics::WaitForDevice();
+
+			RealtimeShaderCompiler::RecompileShadersAndUpdatePipelineObjects(changedFiles);
 		}
 
 		// === START OF GAME AND RENDER LOOP ===

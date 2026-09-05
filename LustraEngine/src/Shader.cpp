@@ -3,7 +3,6 @@
 #include "Graphics.h"
 #include "GraphicsUtils.h"
 #include "Resource.h"
-#include "ShaderCompilerDXC.h"
 
 namespace Resource
 {
@@ -11,28 +10,25 @@ namespace Resource
 	    std::string_view name,
 	    Handle<Shader> shaderHandle,
 	    const ShaderCompilationInfo& compInfo,
-	    ShaderCompiler compiler,
 	    const std::vector<std::string>& includeDirs
 	)
 	{
 		Shader* shader = Get(shaderHandle);
 		ENSURE(shader != nullptr);
+		ENSURE_EX(
+		    shader->module == VK_NULL_HANDLE, "Shader must not already contain data (call delete before re-creating)."
+		);
 
 		shader->name = name;
 
-		bool compSuccessful = false;
-		switch (compiler)
+		bool compSuccessful = ShaderCompilation::CompileShader(compInfo, includeDirs, shader->artifact);
+
+		if (!compSuccessful)
 		{
-			case ShaderCompiler::DXC:
-				compSuccessful = ShaderCompilation::DXC::CompileShader(compInfo, includeDirs, shader->artifact);
-				break;
-
-			default:
-				PRINT_ERROR("Unknown shader compiler type.");
-				CHECK_UNREACHABLE();
+			PRINT_ERROR("Shader compilation failed without any SPIRV to fall back on.");
+			CHECK_NOT_IMPL(); // TODO: Find if there is any way to have a "fallback shader".
+			return;
 		}
-
-		ENSURE(compSuccessful);
 
 		const vk::ShaderModuleCreateInfo shaderModuleInfo = {
 		    .codeSize = shader->artifact.spirvData.size(),
@@ -41,6 +37,8 @@ namespace Resource
 
 		shader->module =
 		    AssertVk(Graphics::gVkDevice.createShaderModule(shaderModuleInfo, Graphics::gAllocationCallbacks));
+
+		shader->compInfo = compInfo;
 
 		NameVk(Graphics::gVkDevice, shader->module, shader->name);
 	}

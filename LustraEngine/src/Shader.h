@@ -13,13 +13,13 @@ namespace Resource
 	{
 		vk::ShaderModule module;
 		ShaderArtifact artifact;
+		ShaderCompilationInfo compInfo;
 	};
 
 	void CreateShader(
 	    std::string_view name,
 	    Handle<Shader> shaderHandle,
 	    const ShaderCompilationInfo& compInfo,
-	    ShaderCompiler compiler,
 	    const std::vector<std::string>& includeDirs
 	);
 

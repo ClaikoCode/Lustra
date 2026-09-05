@@ -9,7 +9,8 @@ namespace ShaderCompilation::DXC
 {
 	void Init();
 
-	// Returns if compilation succeded or not
+	// Returns if compilation succeeded or not.
+	// Artifact will only be modified if compilation was successful.
 	[[nodiscard]] bool CompileShader(
 	    const ShaderCompilationInfo& compInfo,
 	    const std::vector<std::string>& includeDirectories,

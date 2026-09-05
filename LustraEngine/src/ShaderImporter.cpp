@@ -15,16 +15,15 @@ Handle<Shader> AssetImporter<Shader>::Import(const AssetEntry& assetEntry)
 
 	const ShaderCompilationInfo compInfo = {
 	    .entryPoint  = shaderMeta.entryPoint,
-	    .shaderType  = shaderMeta.shaderType,
-	    .shaderModel = shaderMeta.shaderModel,
 	    .shaderPath  = assetEntry.assetPath,
 	    .defines     = {},
+	    .compiler    = shaderMeta.compiler,
+	    .shaderType  = shaderMeta.shaderType,
+	    .shaderModel = shaderMeta.shaderModel,
 	};
 
 	const std::vector<std::string> includeDirs = {};
-	Resource::CreateShader(
-	    compInfo.shaderPath.filename().string(), shaderHandle, compInfo, shaderMeta.compiler, includeDirs
-	);
+	Resource::CreateShader(compInfo.shaderPath.filename().string(), shaderHandle, compInfo, includeDirs);
 
 	return shaderHandle;
 }
